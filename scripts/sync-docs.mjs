@@ -19,13 +19,23 @@ const PRODUCTS = ['adjutant-ai', 'domain-workspace'];
 const SECTIONS = ['user/', 'admin/'];
 const STATE_FILE = '.synced-files.json';
 const MARKDOWN = new Set(['.md', '.mdx']);
+const IMAGES = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp']);
 
 const USAGE = `Usage:
   node scripts/sync-docs.mjs --product <${PRODUCTS.join('|')}> --source <dir> --manifest <file>
+                             [--target-dir <dir>]
 
 Manifest lines are "<source path> -> <target path>", one per line. Blank lines
 and lines starting with # are ignored. Source paths are relative to --source,
-target paths are relative to the product folder and must start with user/ or admin/.`;
+target paths are relative to the product folder and must start with user/ or admin/.
+
+If the source of an entry is a folder, the images inside it are published and
+everything else in it is ignored:
+
+  docs/img/ -> admin/img/
+
+--target-dir writes somewhere other than <product>/, which is how
+scripts/publish.mjs syncs a maintenance release into a frozen version folder.`;
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -103,9 +113,62 @@ function parseManifest(file) {
   return {entries, malformed};
 }
 
+// Every image inside a folder, deepest first kept in a stable order so a
+// manifest expands the same way on every machine.
+function listImages(dir, prefix = '') {
+  const out = [];
+  for (const name of fs.readdirSync(dir).sort()) {
+    const full = path.join(dir, name);
+    const rel = prefix ? `${prefix}/${name}` : name;
+    if (fs.statSync(full).isDirectory()) out.push(...listImages(full, rel));
+    else if (IMAGES.has(path.posix.extname(name).toLowerCase())) out.push(rel);
+  }
+  return out;
+}
+
+// An entry whose source is a folder becomes one entry per image inside it.
+// That keeps everything downstream, the link check included, working on plain
+// file entries: a page may link to a published image because the expansion put
+// it in the manifest. Anything in the folder that is not an image is ignored,
+// which is the point. An author drops a screenshot beside the page and it
+// ships, without the folder's working files coming with it.
+function expandFolders(entries, sourceRoot, problems) {
+  const out = [];
+  for (const entry of entries) {
+    const source = entry.source.replace(/\/+$/, '');
+    const target = entry.target.replace(/\/+$/, '');
+
+    // Leave anything unsafe alone so validate() reports it properly rather
+    // than this reading a path it should not touch.
+    if (escapes(source) || path.posix.isAbsolute(source) || path.isAbsolute(source)) {
+      out.push(entry);
+      continue;
+    }
+
+    const absolute = path.join(sourceRoot, source);
+    if (!fs.existsSync(absolute) || !fs.statSync(absolute).isDirectory()) {
+      out.push(entry);
+      continue;
+    }
+
+    const images = listImages(absolute);
+    if (images.length === 0) {
+      problems.push(
+        `line ${entry.lineNo}: folder "${source}" holds no images ` +
+          `(${[...IMAGES].sort().join(' ')})`,
+      );
+      continue;
+    }
+    for (const rel of images) {
+      out.push({lineNo: entry.lineNo, source: `${source}/${rel}`, target: `${target}/${rel}`});
+    }
+  }
+  return out;
+}
+
 // Every structural check runs before a single byte is written. Unparseable
 // lines are carried in here so one run reports everything at once.
-function validate(entries, malformed, sourceRoot) {
+function validate(entries, malformed, emptyFolders, sourceRoot) {
   const missing = [];
   const badSection = [];
   const traversal = [];
@@ -151,6 +214,7 @@ function validate(entries, malformed, sourceRoot) {
       items: malformed,
       hint: 'expected "<source path> -> <target path>"',
     },
+    {title: 'Empty folder entries', items: emptyFolders},
     {title: 'Absolute paths', items: absolute},
     {title: 'Paths containing ".."', items: traversal},
     {title: 'Targets outside user/ or admin/', items: badSection},
@@ -358,6 +422,7 @@ function main() {
   }
 
   const {product, source, manifest} = args;
+  const targetDir = args['target-dir'];
   if (!product || !source || !manifest) fail(`Missing required argument.\n\n${USAGE}`);
   if (!PRODUCTS.includes(product)) {
     fail(`Unknown product "${product}". Expected one of: ${PRODUCTS.join(', ')}`);
@@ -365,7 +430,7 @@ function main() {
 
   const sourceRoot = path.resolve(source);
   const manifestFile = path.resolve(manifest);
-  const productDir = path.resolve(product);
+  const productDir = path.resolve(targetDir ?? product);
 
   if (!fs.existsSync(sourceRoot) || !fs.statSync(sourceRoot).isDirectory()) {
     fail(`--source is not a directory: ${sourceRoot}`);
@@ -374,11 +439,14 @@ function main() {
     fail(`--manifest is not a file: ${manifestFile}`);
   }
   if (!fs.existsSync(productDir) || !fs.statSync(productDir).isDirectory()) {
-    fail(`Product folder not found: ${productDir}. Run this from the root of the docs repo.`);
+    const what = targetDir ? `--target-dir not found` : `Product folder not found`;
+    fail(`${what}: ${productDir}. Run this from the root of the docs repo.`);
   }
 
-  const {entries, malformed} = parseManifest(manifestFile);
-  validate(entries, malformed, sourceRoot);
+  const parsed = parseManifest(manifestFile);
+  const emptyFolders = [];
+  const entries = expandFolders(parsed.entries, sourceRoot, emptyFolders);
+  validate(entries, parsed.malformed, emptyFolders, sourceRoot);
   if (entries.length === 0) fail(`Manifest has no entries: ${manifestFile}`);
 
   const bySource = new Map(entries.map((e) => [e.source, e]));
@@ -443,8 +511,9 @@ function main() {
   };
   fs.writeFileSync(path.join(productDir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`);
 
+  const where = targetDir ? ` into ${toPosix(path.relative(process.cwd(), productDir))}` : '';
   process.stdout.write(
-    `${product}: wrote ${planned.length} file${planned.length === 1 ? '' : 's'}, ` +
+    `${product}: wrote ${planned.length} file${planned.length === 1 ? '' : 's'}${where}, ` +
       `removed ${removed} from the previous sync.\n`,
   );
 

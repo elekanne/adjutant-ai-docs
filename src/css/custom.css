@@ -67,8 +67,73 @@ h1, h2, h3 {
   color: var(--tddd-gold);
 }
 
+/*
+ * Local search box. It sits on the navy navbar in both colour modes, so it is
+ * styled once against navy rather than following the light/dark surface.
+ */
+.navbar {
+  /* Infima's magnifier is a dark data-URI SVG meant for a pale input. On navy
+     it all but disappears, so swap in a pale one. */
+  --ifm-navbar-search-input-icon: url('data:image/svg+xml;utf8,<svg fill="%23c2cadb" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.02.01C2.69.01 0 2.7 0 6.03s2.69 6.02 6.02 6.02c1.38 0 2.65-.47 3.66-1.25l4.25 4.24 1.4-1.42-4.2-4.2a5.96 5.96 0 001.13-3.5C12.26 2.7 9.55.01 6.02.01zm0 2c2.23 0 4.02 1.8 4.02 4.02s-1.8 4.02-4.02 4.02S2 8.25 2 6.03 3.8 2.01 6.02 2.01z"/></svg>');
+}
+.navbar .navbar__search .navbar__search-input {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(244, 246, 250, 0.25);
+  border-radius: 4px;
+  color: #f4f6fa;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.navbar .navbar__search .navbar__search-input::placeholder {
+  color: rgba(244, 246, 250, 0.6);
+}
+.navbar .navbar__search .navbar__search-input:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.navbar .navbar__search .navbar__search-input:focus {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--tddd-gold);
+  outline: none;
+}
+/* The keyboard shortcut hints, which the plugin renders as <kbd> inside the
+   search box. Its own class is hashed, so target the element. */
+.navbar .navbar__search kbd {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(244, 246, 250, 0.3);
+  box-shadow: none;
+  color: rgba(244, 246, 250, 0.7);
+}
+
 .markdown {
   max-width: 78ch;
+}
+
+/*
+ * Images and diagrams in docs: centred, never wider than the column, with room
+ * to breathe. An image followed by an *italic* line renders that line as a
+ * caption.
+ */
+.markdown img,
+.markdown .docusaurus-mermaid-container {
+  display: block;
+  margin: 1.75rem auto;
+  max-width: 100%;
+  height: auto;
+}
+.markdown .docusaurus-mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+/* Caption: an emphasised paragraph directly after an image or a diagram. */
+.markdown p > img + em,
+.markdown p:has(> img) + p > em:only-child,
+.markdown .docusaurus-mermaid-container + p > em:only-child {
+  display: block;
+  margin-top: -1rem;
+  margin-bottom: 1.75rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  font-style: normal;
+  text-align: center;
 }
 
 .footer--dark {
