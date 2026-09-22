@@ -1,0 +1,79 @@
+/*
+ * Brand styling for the docs site.
+ * Fonts are self-hosted through npm packages, so no requests go to Google.
+ * Replace --tddd-navy with the exact navy from your WordPress/Kadence theme.
+ */
+
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+
+:root {
+  --tddd-navy: #14233f;
+  --tddd-gold: #b8860b;
+
+  /* Links and accents in light mode use navy: gold on white is too low contrast for body text. */
+  --ifm-color-primary: #1f3a68;
+  --ifm-color-primary-dark: #1c345e;
+  --ifm-color-primary-darker: #1a3158;
+  --ifm-color-primary-darkest: #152849;
+  --ifm-color-primary-light: #224072;
+  --ifm-color-primary-lighter: #244378;
+  --ifm-color-primary-lightest: #2a4c87;
+
+  --ifm-font-family-base: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ifm-heading-font-family: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'IBM Plex Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --ifm-code-font-size: 92%;
+  --ifm-navbar-background-color: var(--tddd-navy);
+  --ifm-footer-background-color: var(--tddd-navy);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+/* Dark mode: gold becomes the accent, where it has enough contrast. */
+[data-theme='dark'] {
+  --ifm-color-primary: #d4a22a;
+  --ifm-color-primary-dark: #c8961f;
+  --ifm-color-primary-darker: #bd8e1d;
+  --ifm-color-primary-darkest: #9c7518;
+  --ifm-color-primary-light: #d9ab3d;
+  --ifm-color-primary-lighter: #dcb048;
+  --ifm-color-primary-lightest: #e3bf68;
+  --ifm-background-color: #0f1a2e;
+  --ifm-navbar-background-color: #0b1424;
+  --ifm-footer-background-color: #0b1424;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+/* Navbar sits on navy in both modes, so its text is always light. */
+.navbar {
+  box-shadow: none;
+  border-bottom: 3px solid var(--tddd-gold);
+}
+.navbar__title,
+.navbar__link,
+.navbar .clean-btn,
+.navbar__toggle {
+  color: #f4f6fa;
+}
+.navbar__link:hover,
+.navbar__link--active {
+  color: var(--tddd-gold);
+}
+
+.markdown {
+  max-width: 78ch;
+}
+
+.footer--dark {
+  --ifm-footer-background-color: var(--tddd-navy);
+}
+[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: #0b1424;
+}

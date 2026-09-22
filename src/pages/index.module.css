@@ -1,0 +1,51 @@
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 5rem;
+}
+
+.title {
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  margin-bottom: 0.75rem;
+}
+
+.lead {
+  font-size: 1.15rem;
+  max-width: 60ch;
+  margin-bottom: 2.5rem;
+}
+
+.products {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.product {
+  display: block;
+  padding: 1.5rem 1.5rem 1.25rem;
+  border-left: 4px solid var(--tddd-gold);
+  background: var(--ifm-background-surface-color);
+  color: inherit;
+}
+
+.product:hover {
+  text-decoration: none;
+  color: inherit;
+  background: var(--ifm-hover-overlay);
+}
+
+.product:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.product h2 {
+  font-size: 1.35rem;
+  margin-bottom: 0.5rem;
+  color: var(--ifm-color-primary);
+}
+
+.product p {
+  margin: 0;
+}
