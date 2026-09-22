@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 452" width="800" height="452" role="img" aria-labelledby="t d">
+  <title id="t">Domain Workspace screen layout</title>
+  <desc id="d">A wireframe of the Domain Workspace. Five numbered regions: the header across the top, the ask bar beneath it, the perspective stack down the left edge, the tab bar, and the panel canvas filling the remainder.</desc>
+
+  <style>
+    .lbl  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px; fill: #e8eef7; }
+    .dim  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px; fill: #9db0cc; }
+    .num  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px; font-weight: 700; fill: #14233f; }
+    .reg  { fill: #1e3054; stroke: #43598a; stroke-width: 1; }
+    .chip { fill: #2a4372; stroke: #43598a; stroke-width: 1; }
+    .badge{ fill: #b8860b; }
+  </style>
+
+  <!-- card -->
+  <rect x="1" y="1" width="798" height="450" rx="10" fill="#14233f" stroke="#b8860b" stroke-width="1.5"/>
+
+  <!-- 1 · header -->
+  <rect class="reg" x="28" y="32" width="744" height="56" rx="4"/>
+  <circle class="badge" cx="52" cy="60" r="13"/>
+  <text class="num" x="52" y="65" text-anchor="middle">1</text>
+  <text class="lbl" x="78" y="65">Title · perspective</text>
+  <rect class="chip" x="470" y="46" width="112" height="28" rx="4"/>
+  <text class="dim" x="526" y="65" text-anchor="middle">time range</text>
+  <rect class="chip" x="594" y="46" width="112" height="28" rx="4"/>
+  <text class="dim" x="650" y="65" text-anchor="middle">filter chips</text>
+
+  <!-- 2 · ask bar -->
+  <rect class="reg" x="28" y="100" width="744" height="48" rx="4"/>
+  <circle class="badge" cx="52" cy="124" r="13"/>
+  <text class="num" x="52" y="129" text-anchor="middle">2</text>
+  <text class="lbl" x="78" y="129">Ask a question…</text>
+  <rect class="chip" x="676" y="110" width="80" height="28" rx="4"/>
+  <text class="dim" x="716" y="129" text-anchor="middle">Ask</text>
+
+  <!-- 3 · perspective stack -->
+  <rect class="reg" x="28" y="160" width="64" height="248" rx="4"/>
+  <circle class="badge" cx="60" cy="184" r="13"/>
+  <text class="num" x="60" y="189" text-anchor="middle">3</text>
+  <rect class="chip" x="44" y="212" width="32" height="32" rx="3"/>
+  <rect class="chip" x="44" y="254" width="32" height="32" rx="3"/>
+  <rect class="chip" x="44" y="296" width="32" height="32" rx="3"/>
+  <rect class="chip" x="44" y="338" width="32" height="32" rx="3"/>
+
+  <!-- 4 · tabs -->
+  <rect class="reg" x="104" y="160" width="668" height="44" rx="4"/>
+  <circle class="badge" cx="128" cy="182" r="13"/>
+  <text class="num" x="128" y="187" text-anchor="middle">4</text>
+  <text class="lbl" x="154" y="187">Cockpit · Payments · Answers</text>
+  <text class="dim" x="756" y="187" text-anchor="end">About this Domain Model</text>
+
+  <!-- 5 · canvas -->
+  <rect class="reg" x="104" y="216" width="668" height="192" rx="4"/>
+  <circle class="badge" cx="128" cy="240" r="13"/>
+  <text class="num" x="128" y="245" text-anchor="middle">5</text>
+  <rect class="chip" x="154" y="264" width="286" height="56" rx="4"/>
+  <rect class="chip" x="456" y="264" width="286" height="56" rx="4"/>
+  <rect class="chip" x="154" y="334" width="286" height="56" rx="4"/>
+  <rect class="chip" x="456" y="334" width="286" height="56" rx="4"/>
+  <text class="dim" x="297" y="298" text-anchor="middle">panel</text>
+  <text class="dim" x="599" y="298" text-anchor="middle">panel</text>
+  <text class="dim" x="297" y="368" text-anchor="middle">panel</text>
+  <text class="dim" x="599" y="368" text-anchor="middle">panel</text>
+
+  <text class="dim" x="400" y="434" text-anchor="middle">Your Domain Model decides the tabs, panels and perspectives — names differ from these.</text>
+</svg>

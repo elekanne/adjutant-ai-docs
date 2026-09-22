@@ -178,17 +178,15 @@ have skipped one.
 
 ### Package it as a content app
 
-A minimal content app is:
+A minimal content app is five files, all paths relative to `<your_app>/`:
 
-```
-<your_app>/
-  default/
-    app.conf                        version must equal the model's content_version
-    domain_models.conf              the registry entry
-    data/models/<model>.json        the model
-    data/ui/views/workspace.xml     the view that loads the workspace
-  metadata/default.meta
-```
+| Path | What it is |
+| - | - |
+| `default/app.conf` | The app's own version, which **must equal** the model's `content_version`. |
+| `default/domain_models.conf` | The registry entry that makes the model discoverable. |
+| `default/data/models/<model>.json` | The model document itself. |
+| `default/data/ui/views/workspace.xml` | The view that loads the workspace. |
+| `metadata/default.meta` | The app's default object permissions. |
 
 ### Then
 

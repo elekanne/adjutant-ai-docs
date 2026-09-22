@@ -81,31 +81,15 @@ been given one. See §4.
 
 ## 3. The layout
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  Title · perspective ▼        time range ▼   filter chips   ✕    │  header
-├──────────────────────────────────────────────────────────────────┤
-│  Ask a question…                                      [ Ask ]    │  ask bar
-├───┬──────────────────────────────────────────────────────────────┤
-│ ▣ │  Cockpit │ Payments │ Answers │ …      About this Domain Model│  tabs
-│ ▣ ├──────────────────────────────────────────────────────────────┤
-│ ▣ │                                                              │
-│ ▣ │                        panels                                │  canvas
-│ ▣ │                                                              │
-└───┴──────────────────────────────────────────────────────────────┘
-  ↑ perspective stack
-```
+![The Domain Workspace screen layout, with its five regions numbered](./img/workspace-layout.svg)
 
-| Area | What it is |
-| - | - |
-| **Perspective switcher** | The dropdown top-right. Changes which set of tabs and panels you see. |
-| **Perspective stack** | The vertical strip on the left — the same perspectives as miniatures, with a badge showing how many things need attention in each. Click one to switch. |
-| **Time range** | Standard Splunk time picker. Changing it re-runs every panel that listens to time. |
-| **Filter chips** | Appear beside the time picker when you have filtered on something. Click the ✕ on a chip to clear it. |
-| **Ask bar** | Present in every perspective. See §7. |
-| **Tabs** | Declared by the model. Two are special: **Cockpit** (things needing attention) and **Answers** (where asked questions land if they have nowhere better to go). |
-| **About this Domain Model** | Far right of the tab bar, always present. See §14. |
-| **Canvas** | The panels. Resizes and re-packs when you change the browser window, without re-running any search. |
+| # | Region | What it does |
+| - | - | - |
+| **1** | **Header** | Carries the **perspective switcher** (changes which tabs and panels you see), the **time range** — a standard Splunk picker; changing it re-runs every panel that listens to time — and **filter chips**, which appear once you have filtered on something. |
+| **2** | **Ask bar** | Present in every perspective. Type a question in your own words. See §7. |
+| **3** | **Perspective stack** | The same perspectives as miniatures, each with a badge showing how many things need attention in it. Click one to switch. |
+| **4** | **Tabs** | Declared by the model. Two are special: **Cockpit** (things needing attention) and **Answers** (where asked questions land if they have nowhere better to go). **About this Domain Model** sits at the far right and is always present — see §14. |
+| **5** | **Canvas** | The panels. Resizes and re-packs when you change the browser window, without re-running any search. |
 
 ---
 
