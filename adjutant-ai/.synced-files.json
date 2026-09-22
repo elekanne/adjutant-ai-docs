@@ -1,0 +1,11 @@
+{
+  "product": "adjutant-ai",
+  "syncedAt": "2026-09-22T13:14:31.169Z",
+  "files": [
+    "admin/admin-manual.md",
+    "admin/installation.md",
+    "admin/llm-model-catalog.md",
+    "admin/stateless.md",
+    "user/user-manual.md"
+  ]
+}
