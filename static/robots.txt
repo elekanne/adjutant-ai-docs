@@ -42,24 +42,28 @@ User-agent: AI2Bot
 User-agent: Ai2Bot-Dolma
 Disallow: /
 
-# Reported by log analyses but not documented by their vendors, so these
-# tokens may be wrong or ignored outright. Harmless to list: an unused token
-# matches nothing.
-User-agent: DeepSeekBot
-User-agent: GrokBot
-User-agent: xAI-Grok
-User-agent: xAI-Bot
-User-agent: Grok-DeepSearch
-User-agent: QwenBot
-User-agent: TongyiBot
-User-agent: PanguBot
-User-agent: ERNIEBot
-User-agent: YandexAdditional
-User-agent: YandexAdditionalBot
-User-agent: Timpibot
-User-agent: Brightbot 1.0
-User-agent: SemrushBot-OCOB
-Disallow: /
+# Left inactive on purpose. These tokens come from log analyses and crawler
+# directories, not from the vendors, who publish nothing: xAI, DeepSeek,
+# Alibaba, Huawei and Baidu document no crawler at all. Blocking a token that
+# turns out to be wrong achieves nothing, and a bot that ignores robots.txt is
+# not stopped by a line here either. Uncomment a name once its vendor
+# documents it, or block it at the edge instead.
+#
+# User-agent: DeepSeekBot
+# User-agent: GrokBot
+# User-agent: xAI-Grok
+# User-agent: xAI-Bot
+# User-agent: Grok-DeepSearch
+# User-agent: QwenBot
+# User-agent: TongyiBot
+# User-agent: PanguBot
+# User-agent: ERNIEBot
+# User-agent: YandexAdditional
+# User-agent: YandexAdditionalBot
+# User-agent: Timpibot
+# User-agent: Brightbot 1.0
+# User-agent: SemrushBot-OCOB
+# Disallow: /
 
 
 # --------------------------------------------------------------------------
