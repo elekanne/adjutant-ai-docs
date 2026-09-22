@@ -13,5 +13,7 @@ writing SPL. Every panel runs in Splunk as the viewer, under their existing
 permissions, shows where its numbers came from, and names the cause when the
 data cannot answer instead of showing an empty chart.
 
-Documentation for Domain Workspace is being prepared and will appear here with
-the next release.
+- [User guide](./user) covers opening a workspace and answering questions in
+  it, without writing SPL.
+- [Administration](./admin) covers installing, configuring and operating a
+  workspace, and building and maintaining the Domain Model.

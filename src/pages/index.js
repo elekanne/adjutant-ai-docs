@@ -11,7 +11,7 @@ const products = [
   {
     name: 'Adjutant AI Domain Workspace',
     to: '/domain-workspace/',
-    text: 'Set up and use Domain Workspace alongside Adjutant AI.',
+    text: 'A governed workspace over Splunk, generated from a versioned Domain Model, for investigating a business domain without writing SPL.',
   },
 ];
 
