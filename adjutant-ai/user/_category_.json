@@ -1,0 +1,9 @@
+{
+  "label": "User guide",
+  "position": 2,
+  "collapsed": false,
+  "link": {
+    "type": "generated-index",
+    "slug": "/user"
+  }
+}
