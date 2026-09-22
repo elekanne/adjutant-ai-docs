@@ -60,9 +60,6 @@ that an end user doesn't. For everything an end user sees — the Ask
 tab, History, Settings, attaching references, picking playbooks, the
 guardrail behaviour — read [the user manual](../user/user-manual.md) first.
 
-Keep this manual in lock-step with the shipped app; update it any
-time an admin-visible feature changes.
-
 ## Multi-tenant namespace model — design assumption
 
 Adjutant AI is designed to be **embedded in the navigation menu of
@@ -109,17 +106,17 @@ Help are shared with end users.
 | Tab | Purpose |
 |-----|---------|
 | Playbooks | CRUD on use-case playbooks; promote draft → operational; clone across Org/BU; visibility scoping; **edit each playbook's `includes_skills` list (0.9.6+)**; **see user-authored private playbooks from 0.9.7+** (filter not yet in UI — they appear mixed with system playbooks). 90 ship as seeds. |
-| Skills (0.9.6+) | CRUD on the **Skills layer** — reusable "do-it-correctly" prose blocks that playbooks reference. Sits between Playbooks and Tools. 52 ship as seeds. See the tools and playbooks overview, §3.5. |
+| Skills (0.9.6+) | CRUD on the **Skills layer** — reusable "do-it-correctly" prose blocks that playbooks reference. Sits between Playbooks and Tools. 52 ship as seeds. See [the tools and playbooks overview, §3.5](./tools/tools-and-playbooks.md). |
 | Knowledge | Manage knowledge entries + connectors. Live-platform connectors read the running instance's `searchbnf.conf` (command syntax) and installed visualizations to ground SPL/viz generation (1.4.0). Seven sub-tabs: Connectors, Static rules, Curated entries, Learned Knowledge, Integration State, Integration Runs, Mappings. See the knowledge-layer guide. |
 | Input Sources | The sources a playbook or integration may read from. |
 | Scheduled Ask *(2.x)* | Put a playbook on a timer, via **+ New scheduled ask**. Two kinds: **"Scheduled Job — run a Playbook, deliver a result"** (needs the `scheduled_job` capability, Professional+) and **"Scheduled Integration — read a source, write a target"** (needs the **`ai-integration`** named feature). The integration branch is chosen by the type **or** by the bound Playbook's `integration` tag, so it cannot be booked as a cheaper Job by relabelling. See the Scheduled Ask and memory guide and the AI Driven Integration guide. |
 | Tokens & Costs | Cost / token analytics, multi-group comparison, over-time charts. Greyed unless licence ≥ Professional. |
 | Orgs & BUs | Multi-tenant CRUD. Cap-enforced by licence. |
-| Tools | Four sub-tabs since 2.5.9: **Built-in tools** (enable/disable, per-tool metadata overrides — **182** of them), **Custom tools** (the custom-tools guide), **MCP servers** (registration, tool import, and per-tool expand + run for debugging), **ServiceNow** (the ServiceNow guide). Credentials for MCP and ServiceNow are settable **from the UI** — no backend trip to rotate one. **Full details in the tool catalogue.** |
+| Tools | Four sub-tabs since 2.5.9: **Built-in tools** (enable/disable, per-tool metadata overrides — **182** of them), **Custom tools** ([the custom-tools guide](./tools/custom-tools-authoring.md)), **MCP servers** (registration, tool import, and per-tool expand + run for debugging), **ServiceNow** ([the ServiceNow guide](./integrations/servicenow.md)). Credentials for MCP and ServiceNow are settable **from the UI** — no backend trip to rotate one. **Full details in [the tool catalogue](./tools/tool-catalogue.md).** |
 | Audit (1.3.0+) | Per-Org audit search / timeline / consent + governance log / CSV export. **Greyed unless licence ≥ Enterprise (moved from Professional in 1.4.1).** |
 | License | Activate / validate / remove the Cryptolens licence; manage expiry-warning recipients. |
 | Backups | Browse daily KVStore snapshots, inspect manifest + verification + referenced-credentials inventory per backup, trigger an out-of-schedule backup, and run a 3-step dry-run + acknowledge + commit **restore** (0.9.0+). Greyed unless licence ≥ Professional. |
-| Models *(2.5.9)* | The model + price catalogue, where each price came from, discovery run history, **Refresh from providers**, per-row **Set price** and manual model registration. **This moved out of Settings in 2.5.9** — older screenshots show it there. Authoring needs `model_catalog_overrides` (Enterprise); the catalogue and run history are visible to any admin. See [the LLM model catalogue](./llm-model-catalog.md). |
+| Models *(2.5.9)* | The model + price catalogue, where each price came from, discovery run history, **Refresh from providers**, per-row **Set price** and manual model registration. **This moved out of Settings in 2.5.9** — older screenshots show it there. Authoring needs `model_catalog_overrides` (Enterprise); the catalogue and run history are visible to any admin. See [the LLM model catalogue](./llms/llm-model-catalog.md). |
 | Settings *(shared, with extras)* | Same surface as the user manual, plus central-scope LLMs, the connection **wizard** (**+ Add LLM**, **Edit** and **Open in wizard** are admin-only and are **not rendered at all** for anyone else), and the Customer authorisation hook toggle. |
 
 **Help** is the one tab everybody has, admin or not, and it renders outside the
@@ -132,7 +129,7 @@ End-user controls that admins also have:
   licence-gating is on `effective_tier == "personal"` which doesn't
   apply to admin-served features), Settings for personal LLMs.
 
-## Per-feature licensing (v1.4.1)
+## Per-feature licensing
 
 Up to 1.4.0 the licence tier gated a coarse handful of things (Orgs/BUs
 caps, Tokens & Costs, audit). **1.4.1 replaces that with a per-feature
@@ -176,7 +173,7 @@ disappear. Source of truth: `CAPABILITY_MIN_TIER` in
 | `reliability_llm_ops`, `ai_activity_dashboard`, `llm_health_dashboard`, `multi_model_orchestration` | **Enterprise+** | *Reserved — LLM reliability/observability roadmap.* |
 | `multi_deployment` | **MSP** | Multiple Orgs across deployments. |
 
-### Named licensable features (v1.5.0+) — the second gating dimension
+### Named licensable features — the second gating dimension
 
 Alongside the tier capabilities above, a **second** gate exists: *named
 features* carried in the Cryptolens `cryptolens_features` data object. A
@@ -195,7 +192,7 @@ addressable independently.
 |---|---|---|
 | `socplaybooks` | **Enterprise** | Backend Ask-service SECURITY playbook content (composes with `security_workflows`). |
 | `opsrunbooks` | **Professional** | Operations playbook content. |
-| `servicenow` (+ children `incidents` / `problems` / `events` / `changes` / `csdm`) | **Professional** | The **ServiceNow integration** — all REST tools / knowledge / playbooks + ITSM playbooks. The integration uses the flat parent today; the children are reserved for finer granularity. See the ServiceNow guide. |
+| `servicenow` (+ children `incidents` / `problems` / `events` / `changes` / `csdm`) | **Professional** | The **ServiceNow integration** — all REST tools / knowledge / playbooks + ITSM playbooks. The integration uses the flat parent today; the children are reserved for finer granularity. See [the ServiceNow guide](./integrations/servicenow.md). |
 | `servicenow-mcp` | **Professional** | The ServiceNow **MCP transport** — a deliberate carve-out reachable at Professional **without** the Enterprise `mcp_servers` capability (a *generic* non-ServiceNow MCP server still requires Enterprise). Enforced by `servicenow_mcp_allowed()`. |
 
 ServiceNow **tools** carry a `min_feature` tag (hidden unless the Org both
@@ -294,12 +291,10 @@ ready. The original stays untouched.
 
 ### Promoting draft → operational
 
-In v0.3.0 **every shipped playbook is already operational** out of
-the box. Drafts you create get promoted by editing them and switching
-the status field to `operational`. (Earlier versions had a 4-eyes
-rule; that's been removed.)
+Every shipped playbook that is meant for use arrives **operational**. A draft you
+create is promoted by editing it and switching its status to `operational`.
 
-### `includes_skills` (0.9.6+)
+### `includes_skills`
 
 Every playbook now carries an ordered list of skill names in
 `includes_skills`. At LLM prompt-fetch time the runtime concatenates
@@ -312,11 +307,11 @@ skill is silently injected by the runtime for every operational
 playbook that is not General or Default — do **not** list it
 explicitly, that would inject it twice.
 
-See [Tab: Skills](#tab-skills-096) below for skill CRUD details and
-the tools and playbooks overview, §3.5
+See [Tab: Skills](#tab-skills) below for skill CRUD details and
+[the tools and playbooks overview, §3.5](./tools/tools-and-playbooks.md)
 for the full 24-skill default catalogue plus the architecture diagram.
 
-## Tab: Skills (0.9.6+)
+## Tab: Skills
 
 Skills are reusable "do-it-correctly" prose blocks that playbooks
 inject into the LLM prompt at fetch time. They factor cross-cutting
@@ -372,7 +367,7 @@ the rights and roles reference, §7.4b.
 > one playbook uses belongs in that playbook's `prompt_text`, not in
 > a skill.
 
-## Authoring & promotion model (0.9.7+)
+## Authoring & promotion model
 
 End users can now author their own private playbooks via a
 conversational Ask-tab flow (no YAML / JSON editing). The
@@ -382,14 +377,16 @@ with admin-gated promotion.
 
 ### The sharing ladder
 
-```
-  global  ← visible to all users in all Orgs (Splunk admin to promote)
-    ↑
-   org    ← visible to all users in one Org   (Org admin to promote)
-    ↑
-   bu     ← visible to all users in one BU    (BU admin to promote)
-    ↑
- private  ← visible only to owner_user
+```mermaid
+flowchart BT
+    private["<b>private</b><br/>visible only to the owner"]
+    bu["<b>bu</b><br/>visible to everyone in one Business Unit"]
+    org["<b>org</b><br/>visible to everyone in one Org"]
+    global["<b>global</b><br/>visible to everyone in every Org"]
+
+    private -- "BU admin promotes" --> bu
+    bu -- "Org admin promotes" --> org
+    org -- "Splunk admin promotes" --> global
 ```
 
 Promote = move up. Demote = move down. Each step requires authority
@@ -484,7 +481,7 @@ Playbooks tab's existing Edit modal:
 1. Open the user-authored playbook in the Edit modal.
 2. Change `org_short` / `bu_short` to the desired scope (the
    `sharing` field will follow at read time via the dual-read
-   mapper — see the tools and playbooks overview, §2).
+   mapper — see [the tools and playbooks overview, §2](./tools/tools-and-playbooks.md#2-tenancy-model--org--bu-scoping)).
 3. Save. The row's `sharing` field is now derived to match the new
    tenant scope.
 
@@ -590,9 +587,9 @@ Both UI and server enforce caps:
 - Both operations are admin-only and idempotent (404 is treated as
   "already gone").
 
-## Audit logging (v1.3.0)
+## Audit logging
 
-> Full operator reference: the auditing guide.
+> Full operator reference: [the auditing guide](./security/auditing.md).
 
 Real audit logging records, per Org, **who sent what to which external LLM,
 when, after what consent, and how often** — to a secured per-Org index — so
@@ -608,7 +605,7 @@ after an explicit warning*, not an app fault.
 > `itmip_llm_tenancy._apply_audit_fields`, which refuses to set an audit
 > index without the `audit_logging` capability and returns
 > `Audit logging requires a Professional+ license.` on a direct call. See
-> [Per-feature licensing (v1.4.1)](#per-feature-licensing-v141) above.
+> [Per-feature licensing (v1.4.1)](#per-feature-licensing) above.
 
 **What you, the admin, must do (because the app never creates indexes):**
 
@@ -616,7 +613,7 @@ after an explicit warning*, not an app fault.
    in your own `indexes.conf` (e.g. `[_itmip_audit_DFLT]`) with **retention
    > 24 months** (`frozenTimePeriodInSecs`). On Splunk Cloud, create a normal
    index via ACS (lowercase, no `kvstore` substring), set retention there.
-   See the auditing guide, §4 for copy-paste stanzas.
+   See [the auditing guide, §4](./security/auditing.md) for copy-paste stanzas.
 2. **Enter the index name** in **Orgs & BUs → edit Org → Audit index**.
    *Mandatory for every new Org.* **DFLT is NOT auto-configured** — until you
    set it, DFLT does no real audit logging (a banner reminds you).
@@ -648,7 +645,7 @@ gaps, not a privileged-admin rewrite; only an off-box WORM/SIEM copy hardens
 against that (optional, not built in). You are the data controller — set
 retention, lawful basis and privacy notice per your DPIA.
 
-## Backend Ask Service — agent_runner enablement (1.7.0)
+## Backend Ask Service — agent_runner enablement
 
 > Full operator reference: the Backend Ask Service guide.
 
@@ -666,7 +663,7 @@ telemetry.
 > unattended until you deliberately enable it. The security playbook content
 > additionally rides the **`socplaybooks` named feature (Enterprise)** and
 > operations content the **`opsrunbooks` feature (Professional)** — see
-> [Named licensable features](#named-licensable-features-v150--the-second-gating-dimension)
+> [Named licensable features](#named-licensable-features--the-second-gating-dimension)
 > above.
 
 ### Enabling the engine
@@ -751,7 +748,7 @@ Pipeline telemetry is also queryable directly:
 the Backend Ask Service guide, §9–10 for the symptom →
 knob-to-tune table.
 
-### Triggering playbooks — event, scheduled, REST, and MCP (1.7.x)
+### Triggering playbooks — event, scheduled, REST, and MCP
 
 A playbook (an operational use-case playbook) can be run unattended four ways — all go
 through the **same** bounded, default-deny queue, so none gets more privilege than
@@ -786,9 +783,9 @@ an alert-triggered run. The engine must be **enabled** (`[agent_runner] enabled 
   `MCPready` + Org/BU-visible playbooks are listable/runnable. Every call names the
   **Org/BU** (e.g. `TDDD/SFIT`) as a safeguard (non-admin → own tenant only). Running is
   **admin-only (v1)** and requires the Backend Ask Service enabled. Full setup + auth:
-  **the MCP server guide**.
+  **[the MCP server guide](./tools/mcp-server.md)**.
 
-## Data Foundation (1.5.0)
+## Data Foundation
 
 The 1.5.0 **Data Foundation** surface gives data-onboarding teams three
 admin-relevant capabilities, gated by the **`data_onboarding`** capability
@@ -814,7 +811,7 @@ override per-tool metadata (tags / category / short description), and
 configure tenant-scoped credentials.
 
 This is enough surface to warrant its own document — see
-**the tool catalogue** for the full reference. Quick highlights:
+**[the tool catalogue](./tools/tool-catalogue.md)** for the full reference. Quick highlights:
 
 - **Built-in tools** are scoped per Org/BU via `Manage` rules
   (`Org+BU` > `Org+*` > `*+BU` > `*+*` > implicit-enabled).
@@ -837,7 +834,7 @@ This is enough surface to warrant its own document — see
   interactive; client-credentials / stored service-token unattended);
   tokens are encrypted in `storage/passwords` and never reach the
   browser. Rides the same Enterprise `mcp_servers` gate. Full guide:
-  the MCP OAuth guide.
+  [the MCP OAuth guide](./tools/mcp-oauth.md).
 - **ServiceNow connections** (1.7.0) — the dedicated ServiceNow integration
   (a built-in `servicenow` tool category: incidents, changes, problems,
   CMDB/CSDM with bounded relationship traversal, SIR security incidents,
@@ -850,7 +847,7 @@ This is enough surface to warrant its own document — see
   **Test connection** validates auth + detects the release. All connectivity
   is server-side; credentials never reach the browser; ServiceNow can never
   block the assistant. Gated **Professional + `servicenow`** (MCP rides the
-  `servicenow-mcp` carve-out). Full guide: **the ServiceNow guide**.
+  `servicenow-mcp` carve-out). Full guide: **[the ServiceNow guide](./integrations/servicenow.md)**.
   *(Needs a splunkd restart to register the route + collection.)*
 - **SSE security-content tools** (1.2.0) — a `security-content` tool
   category (`sse_check_prerequisites`, `sse_list_content`,
@@ -872,7 +869,7 @@ This is enough surface to warrant its own document — see
   layout.
 - **Customer-auth hook for IAM-gated targets** — `target_kind` is
   `"llm"` / `"tool"` / `"mcp"`. See
-  the customer authorisation hook guide.
+  [the customer authorisation hook guide](./security/customer-authorisation-hook.md).
 - **Unified audit trail** in `itmip_llm_custom_tool_calls` covers
   custom HTTP tools AND MCP calls (`tool_kind` distinguishes them).
 
@@ -1001,7 +998,7 @@ headers in. Use this for endpoints behind WebEAM.Next, Ping, Okta,
 AzureAD, internal SAML — anywhere static headers aren't enough
 because tokens expire and have to be re-minted.
 
-See the customer authorisation hook guide
+See [the customer authorisation hook guide](./security/customer-authorisation-hook.md)
 for the full function contract, the WebEAM-style worked example,
 storing credentials in `storage/passwords`, caching pattern, and
 security model.
@@ -1032,7 +1029,7 @@ See the supported-LLM matrix for the per-provider
 field mapping (endpoint shape, auth header name, CORS reality,
 streaming support, recommended models).
 
-## CDTSM (Cisco Deep Time Series Model) — admin setup (1.1.1)
+## CDTSM (Cisco Deep Time Series Model) — admin setup
 
 CDTSM is Splunk AI Toolkit's pre-trained, generative time-series model
 (feature preview, MLTK 5.7.3+). The assistant ships three playbooks that
@@ -1041,7 +1038,7 @@ Alerting**. It is an **integration, not a reimplementation**: the model
 and the `apply CDTSM` command live in AI Toolkit; this app only
 orchestrates them (3 seed playbooks + 1 skill + 1 read-only tool, all
 frontend — **no new REST handler, KVStore collection, or egress**).
-Architecture: the CDTSM forecasting guide §8.
+Architecture: [the CDTSM forecasting guide](./integrations/cdtsm-forecasting.md) §8.
 
 **Unlike the other AI-Toolkit playbooks, CDTSM creates no models** — there
 is nothing to share and nothing to clean up in the section below. Saved
@@ -1084,7 +1081,7 @@ required:
    ```
    `--data-urlencode` matters — plain `-d` turns `+` into a space and
    corrupts the token. **No splunkd restart needed**; MLTK reads it at
-   search time. Full runbook: the CDTSM forecasting guide §3–4.
+   search time. Full runbook: [the CDTSM forecasting guide](./integrations/cdtsm-forecasting.md) §3–4.
 
 ### Verifying it
 
@@ -1328,7 +1325,7 @@ A failed verification (`verification.ok = false`) fires no automatic
 alert in 0.8.0 — wire one via the Splunk alert framework against the
 sourcetype `itmip:kvstore:verification`.
 
-### Restoring (0.9.0+)
+### Restoring
 
 The **Backups** tab has a full three-step restore wizard. From any
 backup row click **Restore…** (or open Detail and click **Restore
@@ -1397,7 +1394,7 @@ Restoring **only the app** (e.g. moving installs) still requires
 re-activating the Cryptolens licence against the new SH's GUID —
 the encrypted blob is GUID-bound at the vendor side.
 
-## Content packs (1.7.1)
+## Content packs
 
 A **content pack** is one portable, versioned, integrity-checked file
 (`adjutant-content-pack-v<YYYY.MM.DD>.<N>.itmipcontent`) that delivers
@@ -1479,10 +1476,10 @@ surfaces as *skipped — customer-modified* instead.)
 ## Where to go next
 
 - Content packs (versioned content delivery, integrity model, maintainer build CLI) → the content-packs guide.
-- Tool catalogue, custom tools, MCP servers → the tool catalogue.
+- Tool catalogue, custom tools, MCP servers → [the tool catalogue](./tools/tool-catalogue.md).
 - Dashboard Studio (JSON) pipeline + known failure modes → the Dashboard Studio guide. Studio template currently ships as **draft** (v0.9.5) — that doc covers why and what needs to land for promotion.
 - End-user concerns → [the user manual](../user/user-manual.md).
 - New install → [the installation guide](./installation.md).
 - Something is broken → the troubleshooting guide.
-- Customer corporate-SSO setup → the customer authorisation hook guide.
+- Customer corporate-SSO setup → [the customer authorisation hook guide](./security/customer-authorisation-hook.md).
 - Per-provider LLM matrix → the supported-LLM matrix.

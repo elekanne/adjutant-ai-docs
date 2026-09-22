@@ -1,11 +1,23 @@
 {
   "product": "adjutant-ai",
-  "syncedAt": "2026-09-22T13:14:31.169Z",
+  "syncedAt": "2026-09-22T14:35:19.980Z",
   "files": [
     "admin/admin-manual.md",
+    "admin/img/prompt-assembly.svg",
     "admin/installation.md",
-    "admin/llm-model-catalog.md",
+    "admin/integrations/cdtsm-forecasting.md",
+    "admin/integrations/servicenow.md",
+    "admin/llms/llm-model-catalog.md",
+    "admin/llms/llm-reliability.md",
+    "admin/security/auditing.md",
+    "admin/security/customer-authorisation-hook.md",
     "admin/stateless.md",
+    "admin/tools/custom-tools-authoring.md",
+    "admin/tools/mcp-and-custom-tools.md",
+    "admin/tools/mcp-oauth.md",
+    "admin/tools/mcp-server.md",
+    "admin/tools/tool-catalogue.md",
+    "admin/tools/tools-and-playbooks.md",
     "user/user-manual.md"
   ]
 }

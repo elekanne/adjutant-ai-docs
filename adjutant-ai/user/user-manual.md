@@ -34,9 +34,6 @@ controls on top of everything below.
 > [the installation guide, Deployment model](../admin/installation.md)
 > for the full rationale.
 
-This manual stays in lock-step with the shipped app; update it any
-time a user-visible feature changes.
-
 > **A note on what you can see (license tiers).** Depending on the
 > active license tier, some tabs and playbooks may appear **greyed out
 > with a 🔒 padlock and a short upsell message** instead of being
@@ -342,7 +339,7 @@ The LLM **cannot**:
   / medical / financial-advice content, and refuses to leak the API
   key or system prompts.
 
-### Skills — invisible rules the LLM follows (0.9.6+)
+### Skills — invisible rules the LLM follows
 
 Each playbook you pick — or the **Default** router picks for you —
 comes with a list of **skills**: pre-written rules like "no emojis
@@ -364,7 +361,7 @@ not installed in this environment"* — that's not an error, just an
 honest acknowledgement that the LLM didn't run a check it would
 normally run.
 
-### Creating your own playbooks (0.9.7+)
+### Creating your own playbooks
 
 You can now create your own playbooks without writing any YAML or
 schema — just describe what you want and the LLM does the rest.
@@ -389,9 +386,8 @@ schema — just describe what you want and the LLM does the rest.
      it; only you can refine it.
 5. The response includes the playbook's name. Your new playbook then appears
    as a tile in the **Use-case playbooks** picker on the Ask tab — that is where
-   you use it from. (Earlier versions of this manual promised a click-through to
-   a Playbooks tab filtered to "Mine"; that tab is admin-only, so the picker is
-   your view of your own playbooks.)
+   you use it from. The picker is your view of your own playbooks; there is no separate tab for
+   them.
 
 **To refine later:**
 
@@ -438,7 +434,7 @@ with the safe defaults.
 | "License 'personal' allows up to 1 Org(s)" | Org/BU writes only happen on admin's Orgs & BUs tab — you shouldn't see this. | Tell your admin if you do. |
 | "Refused: dashboard XML contains unsafe markup" | The LLM tried to inject `<script>`, `<iframe>`, or `javascript:` URLs into a dashboard. | The guard worked; ask the LLM to re-generate without those constructs. |
 | "Refused: side-effect command" | The LLM proposed an SPL that would mutate state outside the safe-list. | Re-phrase the request more narrowly. |
-| "customer_auth hook failed: …" | An LLM you're using sits behind a corporate IAM gateway, and the auth dance failed. | Ask your admin to check the WebEAM / SSO health (see the customer authorisation hook guide). |
+| "customer_auth hook failed: …" | An LLM you're using sits behind a corporate IAM gateway, and the auth dance failed. | Ask your admin to check the WebEAM / SSO health (see [the customer authorisation hook guide](../admin/security/customer-authorisation-hook.md)). |
 
 ## The History tab
 
@@ -484,15 +480,13 @@ You can:
 - **Create or edit any AI connection.** `+ Add LLM`, `Edit` and
   `Open in wizard` are admin-only and are **not shown to you at all**.
 
-  > **Correction (2.5.9).** Earlier versions of this manual said you could add
-  > a *personal* LLM configuration with your own API key. **That is no longer
-  > possible** — creating connections moved behind the admin role. If you need
-  > a different model or your own key, ask your admin.
+  > **Creating an AI connection is an administrator's job.** If you need a
+  > different model, or your own API key used, ask your admin.
 
 - Activate or remove the app licence (License tab is hidden).
 - Add or remove Orgs / BUs / playbooks / tool assignments.
 
-## The write-action confirmation (1.8.3)
+## The write-action confirmation
 
 Separate from the security prompt below, and easy to confuse with it.
 
@@ -640,7 +634,7 @@ exist", the share step didn't run — re-ask the playbook, or ask your
 admin to check `splunkd.log` for `itmip_llm_audit action=mltk_share`
 entries.
 
-## CDTSM — forecasting & anomaly detection without training (1.1.1)
+## CDTSM — forecasting & anomaly detection without training
 
 If your Splunk has **AI Toolkit 5.7.3 or newer**, three extra playbooks
 appear in the Ask picker. They use **CDTSM** (the Cisco Deep Time Series
@@ -682,9 +676,9 @@ and the assistant picks a sensible value.
 not installed (or is older than 5.7.3) — ask your admin. On a self-hosted
 Splunk your admin also has to set up a small Cisco model server; if a
 forecast fails with a connection or authentication error, that is what to
-check (see your admin, or the CDTSM forecasting guide).
+check (see your admin, or [the CDTSM forecasting guide](../admin/integrations/cdtsm-forecasting.md)).
 
-## ATT&CK Tactic Hunt — technique coverage dashboard (1.4.0)
+## ATT&CK Tactic Hunt — technique coverage dashboard
 
 If your Splunk has **Splunk Security Essentials (SSE)** installed, an extra
 playbook — **ATT&CK Tactic Hunt — Technique Coverage Dashboard** — appears
@@ -702,7 +696,7 @@ from trusting coverage you don't really have.
 **Needs Splunk Security Essentials.** If you do not see this playbook, SSE is
 not installed or not visible to you — ask your admin.
 
-## ServiceNow — ask about (and raise) tickets (1.7.0)
+## ServiceNow — ask about (and raise) tickets
 
 If your admin has connected your Org to ServiceNow, Adjutant AI can **read and
 write ServiceNow** for you — incidents, problems, changes, and the **CMDB**
@@ -753,9 +747,9 @@ see it, it isn't switched on for your Org.
 playbooks and tools appear **greyed out with a 🔒 padlock** — ask your admin
 about enabling the feature. If your Org simply has no ServiceNow connection
 configured, the ServiceNow tools won't appear at all (your admin sets the
-connection up — see the ServiceNow guide).
+connection up — see [the ServiceNow guide](../admin/integrations/servicenow.md)).
 
-## Data Foundation — onboard a new data source (1.5.0)
+## Data Foundation — onboard a new data source
 
 The data-onboarding playbooks ("Data Source Onboarding (full)") do more than
 advise. Attach a raw **sample log from your computer** (see the Ask tab's
@@ -863,7 +857,7 @@ what is redacted.
   business- or personal-sensitive data to a public LLM is traceable to the
   person who chose to send it. **Treat the confirmation seriously: only
   send data you are authorised to send outside your Splunk environment.**
-  See the auditing guide.
+  See [the auditing guide](../admin/security/auditing.md).
 
 ## Glossary
 

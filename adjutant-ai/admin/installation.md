@@ -120,14 +120,11 @@ The expected deployment pattern is therefore:
 4. **Restrict `itmip_ai_splunk_assistent_app` in the launcher — this is a
    manual step you must perform.**
 
-   > **Correction (2.5.9).** Earlier revisions of this guide said "the shipped
-   > `default.meta` already does this". **It does not, and never did.** As
-   > shipped, `metadata/default.meta` opens with
-   > `access = read : [ * ]` and `default/app.conf` sets `is_visible = 1`, so
-   > **the app tile is visible to every Splunk user out of the box.** If you
-   > followed the old instruction and only "checked that `local.meta` had not
-   > been overridden", the tile is exposed right now. Verify it yourself rather
-   > than taking either version of this sentence on trust.
+   > **Check this on any environment you have already deployed.** As shipped,
+   > `metadata/default.meta` grants `access = read : [ * ]` and `default/app.conf`
+   > sets `is_visible = 1`, so **the app tile is visible to every Splunk user
+   > until you restrict it**. Confirm it on the environment itself rather than
+   > assuming it was done at install time.
 
    Admins still need direct access — that is where Playbooks, Scheduled Ask,
    Tokens & Costs, Orgs & BUs, License, Backups, Tools, Models and Settings
@@ -279,7 +276,7 @@ The first load does several things automatically:
   one default Organisation (`DFLT`), one default Business Unit
   (`DFLT_DFLT`), and the seeded use-case playbooks (**90** today; the
   **Playbooks** tab and
-  the tools and playbooks overview
+  [the tools and playbooks overview](./tools/tools-and-playbooks.md)
   are the source of truth for the current catalogue).
 - Renders the **"Running on free License"** badge next to the app
   title. The Personal (free) tier is **single-user**: it binds to the
@@ -413,7 +410,7 @@ There are **nine provider kinds**: Anthropic, OpenAI, Azure OpenAI, Gemini,
 Groq, Bedrock, OpenRouter, Ollama, and `openai_compatible` — the escape hatch for
 vLLM, LiteLLM, LM Studio, TGI, llama.cpp, SGLang, your own gateway, or a Splunk
 AI Tier BYOLLM endpoint. See
-[the LLM model catalogue](./llm-model-catalog.md) for the models and prices, and
+[the LLM model catalogue](./llms/llm-model-catalog.md) for the models and prices, and
 the connection-wizard guide for what each rung proves.
 
 ### 5.2 Two call modes — pick per LLM
@@ -440,7 +437,7 @@ tokens need to be refreshed per request. Toggle **Customer
 authorisation hook** on the LLM config and edit
 `local/bin/customer_authorisation.py` with the customer's login flow.
 
-See the customer authorisation hook guide
+See [the customer authorisation hook guide](./security/customer-authorisation-hook.md)
 for the function contract, the WebEAM-style worked example, the
 credentials-from-storage-passwords pattern, and caching guidance.
 
@@ -522,7 +519,7 @@ you provision the audit index yourself.
 4. Review captured turns on the **Audit** tab (admin + auditor role);
    export CSV for hand-off.
 
-Full operator guide: the auditing guide.
+Full operator guide: [the auditing guide](./security/auditing.md).
 
 ## 10. Verification
 
@@ -624,14 +621,14 @@ Refer to the role-specific manuals:
   `sc_admin`. Covers Playbooks, Tokens & Costs, Orgs & BUs, License,
   Settings, the v0.8.0 KVStore backup subsystem, and the v0.9.0
   restore wizard.
-- **the tool catalogue** — built-in tool catalogue, per-Org/BU
+- **[the tool catalogue](./tools/tool-catalogue.md)** — built-in tool catalogue, per-Org/BU
   enable/disable, per-tool metadata overrides, custom HTTP tools,
   MCP server registration + import, customer-auth hook for IAM-
   gated targets.
 - **the licensing reference** — tier matrix, the single-user
   free tier, audit gating, and the downgrade-hides-never-deletes
   contract.
-- **the auditing guide** — operator guide for the per-Org
+- **[the auditing guide](./security/auditing.md)** — operator guide for the per-Org
   real audit logging configured in step 9b.
 - **the knowledge-layer guide** — the admin Knowledge
   tab and connectors (1.0.0+). SSE security content now flows through
@@ -647,19 +644,19 @@ Added since this guide was last revised — the subjects that did not exist at
 | Doc | Covers |
 |---|---|
 | **the playbook catalogue** | Every shipped playbook and the use case it covers, with a verdict per run mode (interactive Ask, Scheduled Ask, MCP, AI Driven Integration). Start here when someone asks "what can it actually do". |
-| **[the LLM model catalogue](./llm-model-catalog.md)** | The nine providers, the 31 seeded models and their prices, how a model gets chosen, and how to add one the app has never heard of. |
+| **[the LLM model catalogue](./llms/llm-model-catalog.md)** | The nine providers, the 31 seeded models and their prices, how a model gets chosen, and how to add one the app has never heard of. |
 | **the connection-wizard guide** | The four-step connection wizard and its ten-rung test ladder — what each rung proves and what a failure at it means. |
 | **the AI Driven Integration guide** | Unattended integrations: the versioned mapping contract, watermarks, receipts, clearance and drift. |
 | **the Scheduled Ask and memory guide** | Scheduled Ask — Jobs and Integrations — and the memory model behind them. |
 | **[the stateless operation guide](./stateless.md)** | Running on a disposable search head (§12). Bucket policy, IAM, lifecycle, the lease, verification. |
-| **the MCP server guide** / **the MCP OAuth guide** | Adjutant as an MCP *server* — exposing its tools to other agents — and the OAuth path. |
-| **the custom-tools guide** | Custom HTTP tools: purpose, authoring, limits, and assigning them to playbooks. |
-| **the ServiceNow guide** | ServiceNow ITSM/SIR connections and the tools they expose. |
+| **[the MCP server guide](./tools/mcp-server.md)** / **[the MCP OAuth guide](./tools/mcp-oauth.md)** | Adjutant as an MCP *server* — exposing its tools to other agents — and the OAuth path. |
+| **[the custom-tools guide](./tools/custom-tools-authoring.md)** | Custom HTTP tools: purpose, authoring, limits, and assigning them to playbooks. |
+| **[the ServiceNow guide](./integrations/servicenow.md)** | ServiceNow ITSM/SIR connections and the tools they expose. |
 | **the Outcome Ledger guide** | What the app claims it did, and whether it actually happened. |
 | **the support-bundle guide** | The "Report an issue" diagnostic package — what it collects and what it redacts. |
 | **the rights and roles reference** | Which Splunk roles see what, and which capabilities matter. |
 
-### KVStore backup (v0.8.0+)
+### KVStore backup
 
 A daily KVStore snapshot scripted input runs automatically once the
 app is installed — default schedule 02:00 local time. Snapshots live in
