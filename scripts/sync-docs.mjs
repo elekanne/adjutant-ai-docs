@@ -211,48 +211,78 @@ function resolveLink(pathPart, sourcePath, bySource) {
   return {resolved, entry};
 }
 
-function rewriteLinks(text, entry, bySource, problems) {
+// Work out what one link target points at. Returns null for links we leave
+// alone, otherwise the resolved source path and its manifest entry, if any.
+function inspect(rawTarget, entry, bySource) {
+  const bracketed = /^<([\s\S]*)>$/.exec(rawTarget);
+  const target = bracketed ? bracketed[1] : rawTarget;
+  if (isExternal(target)) return null;
+
+  const {pathPart, suffix} = splitSuffix(target);
+  if (pathPart === '') return null;
+
+  const {resolved, entry: destination} = resolveLink(pathPart, entry.source, bySource);
+  return {target, suffix, resolved, destination, bracketed: Boolean(bracketed)};
+}
+
+// Point a resolved link at its target's new home.
+function relink(found, fromDir) {
+  let next = path.posix.relative(fromDir, found.destination.target);
+  if (!next.startsWith('.')) next = `./${next}`;
+  next += found.suffix;
+  return found.bracketed ? `<${next}>` : next;
+}
+
+function rewriteLinks(text, entry, bySource, problems, warnings) {
   const {masked, stash} = maskCode(text);
   const fromDir = path.posix.dirname(entry.target);
 
-  const rewrite = (rawTarget) => {
-    const bracketed = /^<([\s\S]*)>$/.exec(rawTarget);
-    const target = bracketed ? bracketed[1] : rawTarget;
-    if (isExternal(target)) return rawTarget;
-
-    const {pathPart, suffix} = splitSuffix(target);
-    if (pathPart === '') return rawTarget;
-
-    const {resolved, entry: destination} = resolveLink(pathPart, entry.source, bySource);
-    if (!destination) {
-      problems.push(`${entry.source} -> ${target}  (resolves to ${resolved})`);
+  // Reference definitions and raw HTML carry no link text to fall back on, so
+  // an unlisted file is always an error there.
+  const rewriteStrict = (rawTarget) => {
+    const found = inspect(rawTarget, entry, bySource);
+    if (!found) return rawTarget;
+    if (!found.destination) {
+      problems.push(`${entry.source} -> ${found.target}  (resolves to ${found.resolved})`);
       return rawTarget;
     }
-
-    let next = path.posix.relative(fromDir, destination.target);
-    if (!next.startsWith('.')) next = `./${next}`;
-    next += suffix;
-    return bracketed ? `<${next}>` : next;
+    return relink(found, fromDir);
   };
 
   let out = masked;
 
-  // [text](dest) and ![alt](dest), with an optional "title".
+  // [text](dest) and ![alt](dest), with an optional "title". A link to a
+  // markdown page the manifest does not list degrades to its own link text, so
+  // a private repo can reference a page it chooses not to publish. Anything
+  // else that is missing still fails the run.
   out = out.replace(
-    /(!?\[(?:[^\][\\]|\\.)*\]\(\s*)(<[^>\n]*>|[^()\s]*)((?:\s+["'][^"'\n]*["'])?\s*\))/g,
-    (_, head, dest, tail) => head + rewrite(dest) + tail,
+    /(!?)\[((?:[^\][\\]|\\.)*)\](\(\s*)(<[^>\n]*>|[^()\s]*)((?:\s+["'][^"'\n]*["'])?\s*\))/g,
+    (whole, bang, linkText, open, dest, tail) => {
+      const found = inspect(dest, entry, bySource);
+      if (!found) return whole;
+      if (found.destination) {
+        return `${bang}[${linkText}]${open}${relink(found, fromDir)}${tail}`;
+      }
+      // An image has no page to degrade to, whatever its extension.
+      if (bang === '' && isMarkdown(found.resolved)) {
+        warnings.push({source: entry.source, text: linkText, target: found.target});
+        return linkText;
+      }
+      problems.push(`${entry.source} -> ${found.target}  (resolves to ${found.resolved})`);
+      return whole;
+    },
   );
 
   // Reference definitions: [id]: dest "optional title"
   out = out.replace(
     /^([ \t]{0,3}\[(?:[^\][\\]|\\.)+\]:[ \t]*)(<[^>\n]*>|\S+)/gm,
-    (_, head, dest) => head + rewrite(dest),
+    (_, head, dest) => head + rewriteStrict(dest),
   );
 
   // Raw HTML in markdown, most often <img src="...">.
   out = out.replace(
     /(\b(?:src|href)\s*=\s*)(["'])([^"'>]*)\2/gi,
-    (_, head, quote, dest) => head + quote + rewrite(dest) + quote,
+    (_, head, quote, dest) => head + quote + rewriteStrict(dest) + quote,
   );
 
   return unmaskCode(out, stash);
@@ -366,11 +396,12 @@ function main() {
   // Build every file in memory. A bad link must stop the run before we delete
   // the previous sync.
   const linkProblems = [];
+  const linkWarnings = [];
   const planned = [];
   for (const entry of entries) {
     if (isMarkdown(entry.target)) {
       const original = fs.readFileSync(path.join(sourceRoot, entry.source), 'utf8');
-      const linked = rewriteLinks(original, entry, bySource, linkProblems);
+      const linked = rewriteLinks(original, entry, bySource, linkProblems, linkWarnings);
       planned.push({target: entry.target, contents: addSidebarPosition(linked, entry.position)});
     } else {
       planned.push({target: entry.target, copyFrom: path.join(sourceRoot, entry.source)});
@@ -416,6 +447,18 @@ function main() {
     `${product}: wrote ${planned.length} file${planned.length === 1 ? '' : 's'}, ` +
       `removed ${removed} from the previous sync.\n`,
   );
+
+  if (linkWarnings.length > 0) {
+    const n = linkWarnings.length;
+    const lines = [
+      '',
+      `${n} link${n === 1 ? '' : 's'} to unlisted markdown ` +
+        `page${n === 1 ? '' : 's'} ${n === 1 ? 'was' : 'were'} converted to plain text:`,
+    ];
+    for (const w of linkWarnings) lines.push(`  ${w.source}: "${w.text}" -> ${w.target}`);
+    lines.push('  add the page to the manifest if it should be published.');
+    process.stderr.write(`${lines.join('\n')}\n`);
+  }
 }
 
 main();

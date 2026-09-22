@@ -28,9 +28,18 @@ The workflow in the private repo then runs, from the root of this repo:
 
 The script validates everything before writing a single file, and reports all
 problems at once if something is wrong. It rewrites relative links and image
-references between synced files to their new locations, and fails if a page
-links to a local file the manifest does not list. Pages without a
+references between synced files to their new locations. Pages without a
 `sidebar_position` get one from their order within `user/` or `admin/`.
+
+A link to a markdown page the manifest does not list is replaced by its own
+link text, so a private repo can mention a page it chooses not to publish
+without breaking the build. Each one is listed as a warning at the end of the
+run, so add the page to the manifest if it was meant to be published. A link
+to any other unlisted local file, an image or a script for example, still
+fails the sync. So do an unlisted markdown page reached through an image, a
+`[id]: path` reference definition or raw HTML, since none of those has link
+text to fall back on.
+
 It records what it wrote in `<product>/.synced-files.json` and deletes exactly
 those files on the next run, so a page dropped from the manifest disappears.
 
