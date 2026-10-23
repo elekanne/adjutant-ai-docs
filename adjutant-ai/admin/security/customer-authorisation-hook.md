@@ -4,7 +4,7 @@ sidebar_position: 14
 
 # Customer authorisation hook
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** whoever owns your IAM integration — the person who will write and
 maintain the hook file.
@@ -20,22 +20,22 @@ servers.
 
 > **About this app — read first.** Adjutant AI is a *host shell*: a
 > single-page React app that has **no use-cases of its own**. Every
-> piece of functionality it offers — which playbooks appear, which
+> piece of functionality it offers (which governed agents appear, which
 > LLMs are reachable, which tools the LLM may call, where saved
-> searches / dashboards / alerts land — is fully derived from
+> searches / dashboards / alerts land) is fully derived from
 > **(a) the Splunk app the user opened it from** and **(b) the Splunk
 > roles that user holds**. End users should reach the assistant from
 > within Search / ITSI / Enterprise Security / your custom or MSP
 > customer apps via a nav-menu entry — they should **not** be pointed
 > at the `itmip_ai_splunk_assistent_app` tile directly. The whole
-> point of the Workbench is to deliver an AI assistant *inside other
+> point of the Workbench is to deliver governed agents *inside other
 > apps, for other users*, with all generated knowledge objects landing
 > in those apps' namespaces. See
 > [the installation guide, Deployment model](../installation.md)
 > for the full rationale.
 
-When an outbound target — an LLM endpoint, a custom HTTP tool, or an
-MCP server — sits behind a corporate IAM / SSO gateway (WebEAM.Next,
+When an outbound target (an LLM endpoint, a custom HTTP tool, or an
+MCP server) sits behind a corporate IAM / SSO gateway (WebEAM,
 Ping, Okta, AzureAD, internal SAML, ADFS, etc.), the Splunk-side
 dispatcher needs to attach **fresh, dynamic** HTTP headers to every
 outbound request — short-lived bearer tokens, signed cookies,
@@ -86,8 +86,9 @@ cd $SPLUNK_HOME/etc/apps/itmip_ai_splunk_assistent_app
 mkdir -p local/bin
 cp bin/customer_authorisation.py local/bin/customer_authorisation.py
 $EDITOR local/bin/customer_authorisation.py
-$SPLUNK_HOME/bin/splunk restart
 ```
+
+No restart is needed: the hook is re-read on every call.
 
 ## Function contract
 
@@ -105,7 +106,7 @@ servicing so you can branch token policy if needed.
 | Key | Type | Always present | Notes |
 |-----|------|---|---|
 | `target_kind` | `str` | yes (0.6.0+) | `"llm"` / `"tool"` / `"mcp"`. Older hooks that don't branch on this still work — both `tool` and `mcp` flows pass through. |
-| `splunk_session_key` | `str` | yes | Pass as `sessionKey=` to `splunk.rest.simpleRequest` to query `storage/passwords` or other Splunk endpoints. |
+| `splunk_session_key` | `str` | yes | Which key you get depends on the flow: the **calling user's** key for LLM calls; an **empty string** for custom tools and MCP servers; the app's **system** token for ServiceNow. See [Storing credentials](#storing-credentials). |
 | `splunk_user` | `str` | yes | Calling Splunk user name. Useful for per-user audit logging or per-user token routing. |
 | `body_preview` | `str` | yes (LLM path) | First ~256 chars of the outbound LLM request body. Use to route auth on prompt content when you must. Empty string on the tool / MCP paths. |
 | `llm_config` | `dict` | LLM flow only | The LLM configuration record. Useful keys: `name`, `endpoint`, `provider_kind`, `model`, `org_short`, `bu_short`. |
@@ -175,66 +176,51 @@ def _load_credentials(session_key):
     return u, p
 ```
 
+The read succeeds only with a key that may read stored credentials:
+
+- **LLM calls** pass the calling user's key. The read works only if that user's role may
+  read stored credentials (Splunk's `list_storage_passwords` capability, which ordinary users
+  do not have by default).
+- **Custom tools and MCP servers** pass no key, so the read fails and the call is refused.
+- **ServiceNow** passes the app's system token.
+
 ## Caching tokens
 
-The hook is called **once per request**, and its result is not cached for you. If
-minting a token costs an HTTP round-trip to your IAM gateway, that is added to
-every LLM turn.
+The hook is called **once per request**, and its result is not cached for you. If minting a
+token costs an HTTP round-trip to your IAM gateway, that is added to every call.
 
-> **A module-level cache will not work.** The hook file is re-read and re-executed
-> from disk on every single call — deliberately, so you can edit it and see the
-> change immediately without restarting splunkd. A `_TOKEN_CACHE = {}` at the top
-> of your module is therefore reset before each request and never hits. Earlier
-> revisions of this page recommended exactly that, and blamed the occasional
-> re-mint on worker processes. That was wrong: the cache never survives, on any
-> worker.
+**Mint per call.** This release has no supported way to keep a token from one call to the
+next:
 
-**Cache in KVStore instead.** It is the only store that outlives a call:
+- **A module-level cache does not work.** The hook file is re-read and re-executed from disk
+  on every call, so you can edit it and see the change without restarting splunkd. A
+  `_TOKEN_CACHE = {}` at the top of your module is therefore empty on every call.
+- **Do not store gateway tokens in a KV Store collection or any other store that users can
+  read.** The hook runs with whatever key the flow passes: the calling user's key for LLM
+  calls, none for custom tools and MCP servers. A collection the hook can write with a
+  user's key is one every Console user can read, and the token in it would open your gateway to
+  all of them.
 
-```python
-import json, time
-import splunk.rest as rest
+Many gateways answer in a few milliseconds on the same network, so minting per call is
+usually affordable. The shipped example (`bin/customer_authorisation.py`) and the worked
+example below both do this.
 
-_COLLECTION = "/servicesNS/nobody/itmip_ai_splunk_assistent_app/storage/collections/data/my_token_cache"
+## Worked example: fictional WebEAM
 
-def _cached_token(session_key, cache_key):
-    try:
-        _, body = rest.simpleRequest(
-            "%s/%s" % (_COLLECTION, cache_key),
-            sessionKey=session_key, method="GET", raiseAllErrors=False)
-        row = json.loads(body)
-        if row.get("expires_epoch", 0) > int(time.time()) + 300:
-            return row.get("token")
-    except Exception:
-        pass
-    return None
-```
-
-Write the freshly minted token back the same way, keyed by the connection name,
-and refresh a few minutes before expiry. Create the collection in your own app,
-not in Adjutant AI's, so an upgrade never touches it.
-
-If a round-trip per turn is acceptable — many gateways answer in a few
-milliseconds on the same network — the simplest correct hook is one that mints
-every time and caches nothing.
-
-## Worked example — fictional WebEAM.Next
-
-> The flow below is **illustrative**. Real WebEAM.Next deployments
+> The flow below is **illustrative**. Real WebEAM deployments
 > differ in field names, login URL, and refresh semantics — adapt to
 > your environment.
 
 ```python
-"""WebEAM.Next adapter."""
+"""WebEAM adapter."""
 
 import json
-import time
 import urllib.request
 
 import splunk.rest as rest
 
-# No module-level cache: this file is re-executed on every call, so one would
-# never survive. Mint per request, or cache in KVStore as shown above.
+# No cache: this file is re-executed on every call, so a token is minted
+# per request (see "Caching tokens").
 
 
 def _load_credentials(session_key):
@@ -268,7 +254,7 @@ def _fetch_token(session_key):
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
         payload = json.loads(resp.read())
-    return payload["access_token"], int(time.time()) + _CACHE_TTL_SEC
+    return payload["access_token"]
 
 
 def get_request_headers(context):
@@ -277,7 +263,7 @@ def get_request_headers(context):
     if "webeam" not in (cfg.get("endpoint") or "").lower():
         return {}
 
-    token, _expires = _fetch_token(context["splunk_session_key"])
+    token = _fetch_token(context["splunk_session_key"])
 
     return {
         "Authorization": "Bearer " + token,
@@ -316,14 +302,15 @@ re-running prints whatever headers the gateway gives you.
 
 ## Operational notes
 
-- Hook latency lands on every LLM request. Cache aggressively.
+- Hook latency lands on every LLM request. Keep the hook fast; if it mints
+  tokens, cache them in KVStore as shown in [Caching tokens](#caching-tokens).
+  A module-level cache does not survive between calls.
 - A broken hook fails the LLM call (`502` to the browser). The user
-  sees a clear error in the Ask tab. Other LLM configs without
+  sees a clear error in the Console. Other LLM configs without
   `customer_auth_enabled` are unaffected.
-- Restart splunkd after editing the hook file. Python's persistent
-  handler caches modules between requests; the proxy loads the hook
-  via `importlib.util` fresh on each request, but Splunk's worker pool
-  may keep stale workers around briefly during a restart.
+- An edit takes effect on the next call, without restarting splunkd:
+  the hook is re-read on every call. If an edit seems ignored, save the
+  file again (bytecode is checked by modification time and size).
 
 ## Related
 

@@ -2,16 +2,16 @@
 sidebar_position: 6
 ---
 
-# Overview — playbooks and built-in tools
+# Overview: agent templates and built-in tools
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins, integrators and reviewers who need one flat
-reference of everything that ships in the box — every playbook and every
-built-in tool, with their parameters and how they are scoped per tenant.
+reference of everything that ships in the box: every agent template (a ready definition of a governed agent, with every action gated and logged) and every
+built-in tool, with their parameters and how they are scoped per Org and BU.
 
-> **This is a reference catalogue, not a tutorial.** For how playbooks and tools
-> are configured, scoped per tenant or extended, see [the tool catalogue](./tool-catalogue.md),
+> **This is a reference catalogue, not a tutorial.** For how agents and tools
+> are configured, scoped per Org and BU or extended, see [the tool catalogue](./tool-catalogue.md),
 > [the user manual](../../user/user-manual.md), [the admin manual](../admin-manual.md),
 > the rights and roles reference and
 > the Dashboard Studio guide.
@@ -23,13 +23,13 @@ built-in tool, with their parameters and how they are scoped per tenant.
 1. [How to read this document](#1-how-to-read-this-document)
 2. [Tenancy model — Org / BU scoping](#2-tenancy-model--org--bu-scoping)
    - [2.1 What an Org and a BU are](#21-what-an-org-and-a-bu-are)
-   - [2.2 Runtime tenant resolution](#22-runtime-tenant-resolution)
+   - [2.2 Runtime Org / BU resolution](#22-runtime-org--bu-resolution)
    - [2.3 Scoping built-in tools](#23-scoping-built-in-tools)
    - [2.4 Scoping custom + MCP tools](#24-scoping-custom--mcp-tools)
-   - [2.5 Scoping use-case playbooks](#25-scoping-use-case-playbooks)
+   - [2.5 Scoping agents](#25-scoping-agents)
    - [2.6 Defence-in-depth](#26-defence-in-depth)
-3. [Default use-case playbooks](#3-default-use-case-playbooks)
-   - [3.1 Common playbook fields](#31-common-playbook-fields)
+3. [Agent templates](#3-agent-templates)
+   - [3.1 Common agent template fields](#31-common-agent-template-fields)
    - [3.2 Stage: `operational`](#32-stage-operational)
    - [3.3 Stage: `draft`](#33-stage-draft)
    - [3.5 Default skill catalogue (v0.9.6)](#35-default-skill-catalogue)
@@ -49,18 +49,27 @@ built-in tool, with their parameters and how they are scoped per tenant.
    - [4.13 Category: `enterprise-security`](#413-category-enterprise-security)
    - [4.14 Category: `itsi`](#414-category-itsi)
    - [4.15 Category: `trackme`](#415-category-trackme)
+   - [4.16 Category: `knowledge`](#416-category-knowledge)
+   - [4.17 Category: `security-content`](#417-category-security-content)
+   - [4.18 Category: `data-onboarding`](#418-category-data-onboarding-new-in-150)
+   - [4.19 Category: `servicenow`](#419-category-servicenow-new-in-170)
+   - [4.20 Category: `network-policy`](#420-category-network-policy)
+   - [4.21 Category: `data-platform`](#421-category-data-platform)
+   - [4.22 Category: `fraud`](#422-category-fraud)
+   - [4.23 Category: `dashboards-compiler`](#423-category-dashboards-compiler)
+   - [4.24 Tools the unattended runner adds](#424-tools-the-unattended-runner-adds)
 5. [Cross-reference indices](#5-cross-reference-indices)
-   - [5.1 Playbook → tools invoked](#51-playbook--tools-invoked)
-   - [5.2 Tool → playbooks that invoke it](#52-tool--playbooks-that-invoke-it)
-   - [5.3 Playbook → skills included (v0.9.6)](#53-playbook--skills-included)
-   - [5.4 Skill → playbooks that include it (v0.9.6)](#54-skill--playbooks-that-include-it)
+   - [5.1 Agent template → tools invoked](#51-agent-template--tools-invoked)
+   - [5.2 Tool → agent templates that invoke it](#52-tool--agent-templates-that-invoke-it)
+   - [5.3 Agent template → skills included (v0.9.6)](#53-agent-template--skills-included)
+   - [5.4 Skill → agent templates that include it (v0.9.6)](#54-skill--agent-templates-that-include-it)
 6. [What ships, in numbers](#6-what-ships-in-numbers)
 
 ---
 
 ## 1. How to read this document
 
-- **Playbooks** are seeded from
+- **Agent templates** are seeded from
   `useCases.ts` on first
   load. Entries with `creator=system / updated_by=system / version=1`
   are auto-refreshed on app startup; once an admin edits a row it
@@ -86,9 +95,9 @@ built-in tool, with their parameters and how they are scoped per tenant.
 
 ## 2. Tenancy model — Org / BU scoping
 
-Everything in §3 (playbooks) and §4 (tools) is filtered through a
-two-level multi-tenant model at advertisement time AND at execution
-time. This section explains the model so the per-playbook /
+Everything in §3 (agent templates) and §4 (tools) is filtered through a
+two-level Org / BU model at advertisement time AND at execution
+time. This section explains the model so the per-agent-template /
 per-tool entries that follow make sense.
 
 > **Companion doc.** Read this section together with
@@ -98,8 +107,8 @@ per-tool entries that follow make sense.
 
 ### 2.1 What an Org and a BU are
 
-An **Organisation (Org)** is the top-level tenant; a **Business
-Unit (BU)** is a sub-tenant within an Org. Neither is hardcoded —
+An **Organisation (Org)** is the top-level scope; a **Business
+Unit (BU)** is a scope within an Org. Neither is hardcoded:
 both are KVStore-backed and resolved from Splunk role / app
 patterns at runtime.
 
@@ -111,10 +120,12 @@ patterns at runtime.
 A built-in **`DFLT` / `DFLT`** pair always exists as the universal
 fallback. `DFLT` Org has `role_patterns = ["admin"]` so unconfigured
 admins always resolve cleanly; non-admins fall through to it with
-`is_unassigned=true` flag (the UI shows a grey "no tenant" overlay
-with an admin-configurable message).
+`is_unassigned=true` flag (the UI shows a grey overlay for a caller with no Org,
+with an admin-configurable message, and every REST handler that reads
+or writes Org-scoped data refuses them server-side with HTTP 403 and
+the same message).
 
-### 2.2 Runtime tenant resolution
+### 2.2 Runtime Org / BU resolution
 
 The resolver lives in
 `tenancy.ts` →
@@ -156,14 +167,14 @@ The resolver is `isToolEnabled()` in
 |---|---|---|
 | 1 | `org_short == caller.org` AND `bu_short == caller.bu` | Disable `es_update_notable` for ACME / SOC-B only |
 | 2 | `org_short == caller.org` AND `bu_short == "*"` | Disable `splunk_create_alert` org-wide for ACME |
-| 3 | `org_short == "*"`         AND `bu_short == caller.bu` | Rare; tenant-cross BU rule |
-| 4 | `org_short == "*"`         AND `bu_short == "*"`         | Global kill-switch (e.g. disable AI Toolkit tools on every tenant) |
+| 3 | `org_short == "*"`         AND `bu_short == caller.bu` | Rare; a BU rule across Orgs |
+| 4 | `org_short == "*"`         AND `bu_short == "*"`         | Global kill-switch (e.g. disable AI Toolkit tools in every Org and BU) |
 | (none) | no rule exists for the tool | implicit `enabled = true` |
 
 The first match in this order wins; later rules are NOT evaluated.
 
 **Metadata overrides** (`itmip_tool_overrides`) are app-global, NOT
-per-tenant — one row per `tool_name` replaces the built-in
+per Org or BU: one row per `tool_name` replaces the built-in
 `tags` / `categories` / `short_description` / `short_description_concise`
 everywhere they're shown.
 
@@ -178,18 +189,18 @@ assignment ladder. The visibility filter is `_doc_visible_to()` in
 |---|---|
 | `private` (default) | Only callers whose `(org, bu)` exactly matches the tool's `(scope_owner_org, scope_owner_bu)`. |
 | `app` | Any caller in the same Org as the tool's `scope_owner_org`, regardless of BU. |
-| `global` | Every caller, every tenant. |
+| `global` | Every caller, in every Org and BU. |
 
 Admins always bypass the filter (`isAdmin → return True` early).
 
 MCP-imported tools follow the same model AND additionally pass
 through the per-(Org, BU) enable/disable ladder of §2.3 — a
-double-filter so an admin can mute one imported tool for one tenant
+double-filter so an admin can mute one imported tool for one Org or BU
 without unimporting it for everyone.
 
 ### 2.4.5 Sharing scope ladder
 
-Starting in 0.9.7, every playbook + every skill (+ every tool, with
+Starting in 0.9.7, every agent + every skill (+ every tool, with
 field renames) carries a four-step **sharing scope ladder** stored
 directly on the row:
 
@@ -212,54 +223,53 @@ The visibility filter switches on `sharing` first, then falls back
 to the legacy `org_short` / `bu_short` derivation for pre-0.9.7 rows
 (dual-read; legacy fields stay one release and are removed in 0.9.8).
 
-**End-user-authored playbooks** always start at `sharing=private`;
+**Agents that end users author** always start at `sharing=private`;
 the server (`splunk_create_user_template` in
 `itmip_llm_user_templates.py`)
 forces this regardless of what the LLM emits. Admins promote
-upward via the Playbooks tab; promotion authority is per spec §1.3
-of the design specification.
+upward via the **Agents** tab, following the ladder above.
 
 **Skills** can be at any scope but in practice ship at `global`
 (admin-only authoring; no end-user skill flow). The visibility
 filter handles `private` defensively for forward-compat.
 
-### 2.5 Scoping use-case playbooks
+### 2.5 Scoping agents
 
-Playbooks carry `org_short` + `bu_short` directly. The filter is
+Agents carry `org_short` + `bu_short` directly. The filter is
 `filterByUserAccess()` in
 `useCases.ts`:
 
-| Playbook's `(org_short, bu_short)` | Visible to |
+| Agent's `(org_short, bu_short)` | Visible to |
 |---|---|
-| `(DFLT, DFLT)` | Everyone (subject to role + dependent-app gates). All default playbooks ship as `DFLT / DFLT`. |
+| `(DFLT, DFLT)` | Everyone (subject to role + dependent-app gates). All agent templates ship as `DFLT / DFLT`. |
 | `(ACME, DFLT)` | All callers resolved to Org `ACME`, regardless of BU. |
 | `(ACME, OPS)` | Only callers resolved to Org `ACME` AND BU `OPS`. |
-| Other combinations | Hidden — admins see them only via the *Show drafts / all tenants* toggle on the Playbooks tab. |
+| Other combinations | Hidden. Admins see them only via the *Show drafts / all tenants* toggle on the **Agents** tab. |
 
-Two additional gates always apply on top of the tenant filter:
+Two additional gates always apply on top of the Org / BU filter:
 
 - **`required_roles`** — when set, the caller must hold at least
-  one listed Splunk role. Admins bypass. Default playbooks with
+  one listed Splunk role. Admins bypass. Agent templates with
   this gate today: *Build / improve an alert* and *AI Toolkit –
   Outlier ALERT + diagnostic dashboard* (require `power` or
   `admin`); *Data onboarding helper* (requires `admin`).
 - **`dependent_apps`** — list of `{name, min_version}` Splunk apps
-  that must be installed on the search head. Playbooks whose
+  that must be installed on the search head. Agents whose
   dependencies are missing are dropped from the user's list — they
   are *never* shown as broken. Used by all `AI Toolkit – *`
   (Splunk_ML_Toolkit), `ES — *` (SplunkEnterpriseSecuritySuite),
   `ITSI — *` (SA-ITOA), `TrackMe — *` (trackme + optional
   combinations).
 
-Two playbooks are special-cased in the filter:
+Two agent templates are special-cased in the filter:
 
-- `is_general=true` (only **General**) — never shown in any picker;
+- `is_general=true` (only **General**, the base guardrails): never shown in any picker;
   silently prepended to every interaction as a guardrail.
-- `is_default=true` (only **Default**) — auto-selected when the
-  user submits a free-form question without picking a playbook;
+- `is_default=true` (only **Default**, the router): auto-selected when the
+  user submits a free-form question without picking an agent;
   serves as a router that calls `splunk_list_use_case_templates` +
   `splunk_get_use_case_template_prompt` to dispatch to the right
-  specialist playbook.
+  specialist agent.
 
 ### 2.6 Defence-in-depth
 
@@ -273,13 +283,13 @@ client-side bypass.
 | Built-in tool | `listToolsForRouting()` in `tools.ts` calls `isToolEnabled()` before adding to LLM-facing list. | `executeTool()` in `tools.ts` re-calls `isToolEnabled()` before dispatching; returns `{ok: false, error: "Tool 'X' is disabled for Org=Y/BU=Z"}` on miss. |
 | Custom HTTP tool | `_handle_definitions()` in `itmip_llm_custom_tools.py` calls `_doc_visible_to()` per row before emitting. | `_handle_invoke()` re-calls `_doc_visible_to()` and checks `enabled` flag; HTTP 403 on miss. |
 | MCP-imported tool | Same `_doc_visible_to()` + `isToolEnabled()` ladder as above. | Same dual check. |
-| Playbook | `filterByUserAccess()` in `useCases.ts` filters the list before the picker / router sees it. | `splunk_get_use_case_template_prompt` server handler in `itmip_llm_use_cases.py` re-runs the filter before returning prompt text. |
+| Agent | `filterByUserAccess()` in `useCases.ts` filters the list before the picker / router sees it. | `splunk_get_use_case_template_prompt` server handler in `itmip_llm_use_cases.py` re-runs the filter before returning prompt text. |
 
 > **Audit follow-through.** Every tool invocation writes a row to
 > `itmip_llm_custom_tool_calls` (custom + MCP) or to per-tool
 > usage telemetry (built-in via `itmip_llm_usage_log.py`). Rows
 > include `org_short` / `bu_short` so an admin can answer "what did
-> tenant X run last week" with `| inputlookup`.
+> Org X run last week" with `| inputlookup`.
 
 ### Where the admin UI surfaces this
 
@@ -290,22 +300,22 @@ client-side bypass.
 - **Tools tab → MCP servers editor** — set the same scope fields
   on a registered MCP server; imported tools inherit but can be
   overridden per row.
-- **Playbooks tab → Edit modal** — set `org_short`, `bu_short`,
+- **Agents tab → Edit modal**: set `org_short`, `bu_short`,
   `required_roles`, `dependent_apps`, `status` (operational/draft)
-  on a playbook row.
-- **Settings → Organisations / Business units** — define new Orgs +
+  on an agent row.
+- **Orgs & BUs tab**: define new Orgs +
   BUs, edit `app_patterns` / `role_patterns`.
 
-> **Splunk Cloud caveat.** The tenancy model itself works on Cloud
+> **Splunk Cloud caveat.** The Org / BU model itself works on Cloud
 > unchanged. What differs on Cloud is what an admin can *disable*
-> via per-tenant rules — e.g. the dev-mode `tls_skip_verify`
-> escape hatch is force-stripped Cloud-wide regardless of tenant
+> via per-Org/BU rules, e.g. the dev-mode `tls_skip_verify`
+> escape hatch is force-stripped Cloud-wide regardless of Org / BU
 > rules. See
 > [the tool catalogue](./tool-catalogue.md) §"Working with PEM files".
 
 ---
 
-## 3. Default use-case playbooks
+## 3. Agent templates
 
 ### 3.0 Per-feature licensing tags
 
@@ -316,7 +326,7 @@ gate: every capability has its own minimum tier. The source of truth is
 resolved server-side and emitted as `capabilities` from
 `GET /services/itmip_llm/license` (server-authoritative + fail-closed —
 a capability the licence doesn't grant is refused even if the UI offers
-it). Playbooks carry a `required_capability` and built-in tools a
+it). Agents carry a `required_capability` and built-in tools a
 `min_capability`; this doc annotates the affected groups rather than
 every row. The full customer-facing matrix lives in
 the licensing reference.
@@ -325,20 +335,20 @@ the licensing reference.
 
 | Tag value | Capability | Minimum tier | Applies to |
 |---|---|---|---|
-| `security_workflows` | Security + threat-hunting workflows | **Enterprise** | The 17 security playbooks (ES + ITSI + ATT&CK Tactic Hunt) AND every `es_*` / `itsi_*` / `sse_*` tool. |
+| `security_workflows` | Security + threat-hunting workflows | **Enterprise** | The 17 security agent templates (ES + ITSI + ATT&CK Tactic Hunt) AND every `es_*` / `itsi_*` / `sse_*` tool. |
 | `in_splunk_awareness` | In-Splunk feed/context awareness *(deprecated 1.7.1 — gates nothing)* | ~~Professional~~ **All tiers** | Formerly gated every `trackme_*` feed-health tool + the `_internal`/Cribl ingestion-health checks. As of v1.7.1 these data-quality ingestion checks are available on **every tier (incl. Personal)** — the boundary is now Splunk's own role + index ACLs, not this capability. The key is kept (still emitted on `GET /itmip_llm/license`) only for back-compat. |
-| `ml_generation` | ML model generation | **Professional** | The 10 ML-*training* playbooks AND `splunk_share_mltk_model_globally`. |
+| `ml_generation` | ML model generation | **Professional** | The 10 ML-*training* agent templates AND `splunk_share_mltk_model_globally`. |
 
 Everything **not** listed above stays open on every tier (Personal
 included): SPL / dashboard / alert generation, BYOK + multi-LLM,
-knowledge, skills, and playbook authoring. The scoring/advisory
-AI-Toolkit playbooks that don't *train* a model — *Stats vs ML decision
+knowledge, skills, and authoring your own agents. The scoring/advisory
+AI-Toolkit agent templates that don't *train* a model (*Stats vs ML decision
 helper*, *Ask an external LLM (`ai` command)*, *Bring your own ONNX
-model*, *Score against an AWS SageMaker endpoint* — are deliberately
+model*, *Score against an AWS SageMaker endpoint*) are deliberately
 **open** (no `ml_generation` gate). History, tokens & costs, and backups
 are Professional+ surfaces; MCP servers, custom HTTP tools, the IAM
 gateway hook, and audit + governance logging are Enterprise+ surfaces —
-see the licensing reference for those non-playbook/non-tool gates.
+see the licensing reference for those non-agent/non-tool gates.
 
 > **Note — audit logging moved to Enterprise in 1.4.1.** Through 1.3.x
 > audit logging was Professional+; from 1.4.1 it sits with governance
@@ -350,52 +360,52 @@ see the licensing reference for those non-playbook/non-tool gates.
 > static API key — a keyless, server-side-only path (`call_mode = splunk_proxy`
 > forced; the Bearer token never reaches the browser). This keyless path is gated
 > on the new **Enterprise** capability `azure_entra_auth`; **API-key Azure remains
-> available on all tiers**. It adds no new tool, playbook, or skill (it is an LLM
+> available on all tiers**. It adds no new tool, agent template, or skill (it is an LLM
 > **provider-auth** feature). See the Azure Entra authentication guide +
 > the licensing reference.
 
-### 3.1 Common playbook fields
+### 3.1 Common agent template fields
 
-Every seeded playbook carries the following fields. Most are stable
-across the catalogue; the value-bearing fields per playbook are
-listed in the per-playbook sections below.
+Every agent template carries the following fields. Most are stable
+across the catalogue; the value-bearing fields per agent template are
+listed in the section for each agent template below.
 
 | Field | Meaning |
 |---|---|
-| `name` | Unique human-readable id; shown on the Playbooks tab tile. |
-| `status` | `operational` (visible to end users) / `draft` (hidden behind the Drafts toggle) / `deleted` (tombstone). |
-| `prompt_text` | The system-prompt body the LLM sees when this playbook is active. |
+| `name` | Unique human-readable id; shown on the **Agents** tab tile. |
+| `status` | `operational` (visible to end users) / `draft` (an agent template in preview, shown only to admins in the **Draft** group of the **Agents** tab) / `deleted` (tombstone). |
+| `prompt_text` | The system-prompt body the LLM sees when this agent is active. |
 | `question_text` | The user-facing form prompt — the questions the UI asks before launching the LLM. |
 | `short_description` | Curated one-liner used by the router and by `splunk_list_use_case_templates`. |
 | `short_description_concise` | Optional condensed variant for Concise Mode (0.9.3+). |
 | `style_profile` | Optional LLM-style hint: `default` / `concise` / `verbose`. |
 | `categories` | Semantic groupings (e.g. `search`, `ai-toolkit`, `security-soc`). |
 | `tags` | Searchable labels (e.g. `creates-objects`, `read-only`, `iterative`, `siem`). |
-| `dependent_apps` | List of `{name, min_version}` apps the playbook needs (e.g. `Splunk_ML_Toolkit ≥ 5.0.0`). |
-| `required_roles` | Splunk roles required to use this playbook (e.g. `["power", "admin"]`). |
+| `dependent_apps` | List of `{name, min_version}` apps the agent needs (e.g. `Splunk_ML_Toolkit ≥ 5.0.0`). |
+| `required_roles` | Splunk roles required to use this agent (e.g. `["power", "admin"]`). |
 | `org_short` / `bu_short` | Tenant scope; defaults to `DFLT` / `DFLT` for global visibility. |
-| `is_default` | True only for the `Default` router playbook. |
-| `is_general` | True only for the `General` guardrail playbook (never user-pickable). |
-| `allowed_tools` / `denied_tools` / `tool_tag_filters` / `tool_category_filters` | Optional tool-scoping overrides. All default playbooks leave these empty — the dispatcher's minimum-budget routing applies. |
-| `allowed_template_refs` / `denied_template_refs` / `template_tag_filters` / `template_category_filters` | Optional cross-playbook referencing controls. All default playbooks leave these empty. |
+| `is_default` | True only for `Default`, the router. |
+| `is_general` | True only for `General`, the base guardrails (never user-pickable). |
+| `allowed_tools` / `denied_tools` / `tool_tag_filters` / `tool_category_filters` | Optional tool-scoping overrides. All agent templates leave these empty; the dispatcher's minimum-budget routing applies. |
+| `allowed_template_refs` / `denied_template_refs` / `template_tag_filters` / `template_category_filters` | Optional controls for referencing other agents. All agent templates leave these empty. |
 
 ### 3.2 Stage: `operational`
 
-These playbooks are visible to end users without enabling drafts.
+These agent templates are ready and visible to end users.
 Each entry below shows: header table (status, tags, short description,
 inputs) followed by a **structured workflow detail** block.
 
 #### 3.2.1 Foundation — applied automatically
 
-| Playbook | Categories | Tags | Short description |
+| Agent template | Categories | Tags | Short description |
 |---|---|---|---|
 | **General** | `general` | `guardrail`, `read-only`, `splunk-cloud-safe` | Universal scope + safety guardrail silently prepended to every prompt; defines refusals, no-emoji rule, uniform-colour palette and base-search dashboard rules. |
-| **Default** | `general` | `router`, `read-only`, `splunk-cloud-safe` | Router fallback used when the user did not pre-select a playbook; lists playbooks and dispatches the user's free-form question to the best match. |
+| **Default** | `general` | `router`, `read-only`, `splunk-cloud-safe` | Router fallback used when the user did not pre-select an agent; lists agents and dispatches the user's free-form question to the best match. |
 
-The `General` playbook is never user-pickable (`is_general=true`) —
+`General`, the base guardrails, is never user-pickable (`is_general=true`):
 it is silently composed onto every interaction. `Default`
-(`is_default=true`) handles the no-playbook case by listing
-available playbooks and routing the user's question.
+(`is_default=true`) is the router: it handles the case where no agent was picked by listing
+available agents and routing the user's question.
 
 ##### General — workflow detail
 
@@ -407,22 +417,22 @@ available playbooks and routing the user's question.
 
 ##### Default — workflow detail
 
-- **Intent:** Route a free-form user question to the right specialist playbook by intent-matching against `short_description`s.
-- **Workflow phases:** (1) `splunk_list_use_case_templates` (already role / Org / BU / dependent-app filtered); (2) parse the user's question for intent signals; (3) match to playbook `short_description`, preferring the most specific fit; (4) `splunk_get_use_case_template_prompt` for the chosen playbook; (5) apply that playbook's logic, briefly justifying the choice ("I picked *Build a SPL search* because …").
+- **Intent:** Route a free-form user question to the right specialist agent by intent-matching against `short_description`s.
+- **Workflow phases:** (1) `splunk_list_use_case_templates` (already role / Org / BU / dependent-app filtered); (2) parse the user's question for intent signals; (3) match to agent template `short_description`, preferring the most specific fit; (4) `splunk_get_use_case_template_prompt` for the chosen agent template; (5) apply that agent template's logic, briefly justifying the choice ("I picked *Build a SPL search* because …").
 - **Tools invoked:** `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt`.
-- **Output artifacts:** none directly — handed off to chosen playbook.
-- **Output style:** one-line playbook-choice justification before delegating.
+- **Output artifacts:** none directly; handed off to the chosen agent.
+- **Output style:** one-line justification of the chosen agent before delegating.
 
 #### 3.2.2 Search authoring
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **Build a SPL search** | `creates-objects`, `saved-search-output`, `spl`, `iterative`, `splunk-cloud-safe` | Author a NEW optimised SPL search from intent, validate it via a test run, then persist it as a named saved search. | saved-search name • intent • indexes • sourcetype / source / host • time range • fields • aggregation • output shape • performance notes |
 | **Improve an existing SPL** | `modifies-objects`, `saved-search-output`, `spl`, `iterative`, `splunk-cloud-safe`, `audit` | Refactor an existing SPL for speed / correctness / readability, benchmark before-and-after, then save as new or overwrite the original. | existing saved-search name • SPL to improve • problem (slow / wrong / unreadable / migration) • save strategy • time range • data-model acceptability • preservation requirements |
 
 ##### Build a SPL search — workflow detail
 
-- **Workflow phases:** (1) clarify intent via numbered Qs if index / time-range / output / save-name is ambiguous; (2) ground via `splunk_list_indexes` + `splunk_list_saved_searches` + `splunk_get_version` (real names, no invention); (3) optimise SPL — explicit `index`+`earliest`/`latest` first, `tstats` over accelerated DMs, filters before transforms, `fields` early, prefer `eval` / `where` over `regex`, prefer `stats`/`timechart` over `transaction`; (4) validate via `splunk_run_search` (–15m → now); (5) name-conflict check via `splunk_list_saved_searches`, ask user on collision; (6) persist via `splunk_create_saved_search` (auto-validates); (7) self-correct on `validation.ok=false`, max 3 attempts; (8) deliver SPL in ```` ```spl ```` block + one-line explanation + perf-choice justification + clickable link.
+- **Workflow phases:** (1) break the request into its elements (measure, every filter, the split, index, time range) and clarify via numbered Qs if index / time-range / output / save-name is ambiguous; (2) ground via `splunk_list_indexes` + `splunk_list_saved_searches` + `splunk_get_version` (real names, no invention); (3) optimise SPL — explicit `index`+`earliest`/`latest` first, `tstats` over accelerated DMs, filters before transforms, `fields` early, prefer `eval` / `where` over `regex`, prefer `stats`/`timechart` over `transaction`; (4) validate via `splunk_run_search` (–15m → now); (5) name-conflict check via `splunk_list_saved_searches`, ask user on collision; a collision decides only the name, and an overwrite still uses the SPL designed from this request; (6) coverage check (`spl-intent-coverage`): every element of the request maps to a clause, or becomes a question to the user; (7) persist via `splunk_create_saved_search` (auto-validates); (8) self-correct on `validation.ok=false`, max 3 attempts; (9) deliver SPL in ```` ```spl ```` block + one sentence stating what it counts and every filter + perf-choice justification + clickable link.
 - **Tools invoked:** `splunk_list_indexes`, `splunk_list_saved_searches`, `splunk_list_lookups`, `splunk_get_version`, `splunk_run_search`, `splunk_create_saved_search`.
 - **Output artifacts:** 1 saved search (persistent).
 - **Output style:** never deliver failing SPL; never persist without `validation.ok=true`; perf-choice justification mandatory.
@@ -436,7 +446,7 @@ available playbooks and routing the user's question.
 
 #### 3.2.3 Dashboard authoring (Simple XML)
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **Build a Simple XML dashboard** | `creates-objects`, `dashboard-output`, `dashboard-xml`, `spl`, `iterative`, `splunk-cloud-safe` | Generate a complete Simple XML dashboard (tokens, inputs, panels, dual-axis rules) and self-correct via panel-data validation until it renders clean. | dashboard name • description • primary indexes • time picker (yes/no) • default range • form inputs • panels (free-form) • visualization preferences • drilldown / refresh |
 | **Improve a Simple XML dashboard** | `modifies-objects`, `dashboard-output`, `dashboard-xml`, `spl`, `iterative`, `splunk-cloud-safe`, `audit` | Diagnose anti-patterns in pasted Simple XML (missing inputs, slow SPL, bad viz choices) and apply a validated rewrite to the existing dashboard. | dashboard name • problem (performance / errors / layout / inputs / migration) • existing XML (pasted) • preservation requirements |
@@ -447,7 +457,7 @@ available playbooks and routing the user's question.
 ##### Build a Simple XML dashboard — workflow detail
 
 - **Workflow phases:** (1) clarify name (lowercase_with_underscores, unique), ≥1 panel, time-picker behaviour, critical inputs; (2) ground via `splunk_get_version` + `splunk_list_indexes` + `splunk_list_saved_searches` + `splunk_list_visualizations` EARLY (custom-viz fit?); (3) structure `<dashboard version="1.1">` with `<label>`, `<description>`, time-picker `<input>` + `<default>`, per-panel form inputs (each `$token$` MUST have matching `<input token="…">`), panels with `<search>` + `<earliest>$tok.earliest$</earliest>` / `<latest>$tok.latest$</latest>`, layout KPIs → trend → breakdowns → details, SPL optimised; (4) token discipline strict (validator fails on orphan tokens); (5) **no emojis / icons anywhere** (plain ASCII in `<label>`, `<description>`, `<title>`, `<option>`, `<html>`, view name); (6) HTML lives **only** in `<panel><html>…</html>` — `<label>` / `<description>` / panel `<title>` are plain text; (7) dual-axis when value ranges differ ≥ ~10× via `charting.chart.overlayFields` + `charting.axisY2.enabled=true` + `axisTitleY.text` + `axisTitleY2.text`; (8) name-check via `splunk_get_dashboard_xml`, ask user on collision; (9) create via `splunk_create_dashboard_xml` (auto-validates); (10) self-correct via `splunk_update_dashboard_xml` if `validation.ok=false`, max 3 attempts; (11) **render check mandatory** via `splunk_get_dashboard_panel_data` — `response.ok=true` is the success gate, not just `validation.ok`; max 3 combined fix attempts; (12) deliver plain-language summary + links + "what to look at" guide.
-- **v1.4.0 — now builder-driven.** This playbook sets `tool_category_filters: ["dashboards-simplexml"]` and drives the `splunk_xml_*` builder instead of hand-writing XML: `splunk_xml_create` → `splunk_xml_add_input` (time first; ISO/relative defaults) → `splunk_xml_add_panel` once per panel (RAW SPL; `full_width`/`row` for the evidence-side-by-side layout) → `splunk_xml_publish` (orphan-token gate + the same guardrails as `splunk_create_dashboard_xml`) → render-check via `splunk_get_dashboard_panel_data`, self-correct with `splunk_xml_update_panel`. No raw XML, no truncation, no manual escaping.
+- **v1.4.0: now builder-driven.** This agent template sets `tool_category_filters: ["dashboards-simplexml"]` and drives the `splunk_xml_*` builder instead of hand-writing XML: `splunk_xml_create` → `splunk_xml_add_input` (time first; ISO/relative defaults) → `splunk_xml_add_panel` once per panel (RAW SPL; `full_width`/`row` for the evidence-side-by-side layout) → `splunk_xml_publish` (orphan-token gate + the same guardrails as `splunk_create_dashboard_xml`) → render-check via `splunk_get_dashboard_panel_data`, self-correct with `splunk_xml_update_panel`. No raw XML, no truncation, no manual escaping.
 - **Tools invoked:** `splunk_get_version`, `splunk_list_indexes`, `splunk_list_saved_searches`, `splunk_list_visualizations`, `splunk_route_tools`, `splunk_xml_create`, `splunk_xml_add_input`, `splunk_xml_add_panel`, `splunk_xml_update_panel`, `splunk_xml_preview`, `splunk_xml_publish`, `splunk_get_dashboard_panel_data` (hand-written `splunk_create_dashboard_xml` / `splunk_update_dashboard_xml` remain for trivial 1–2 panel dashboards).
 - **Output artifacts:** 1 Simple XML dashboard (persistent).
 - **Output style:** token discipline critical (orphan = validation fail); dual-axis use stated in response; render-check errors actionable and must be fixed.
@@ -461,41 +471,41 @@ available playbooks and routing the user's question.
 
 ##### ATT&CK Tactic Hunt — Technique Coverage Dashboard — workflow detail
 
-- **Per-feature licensing (v1.4.1):** carries `required_capability = security_workflows` → **requires `security_workflows` (Enterprise)** (the 17th security playbook; its `sse_*` tools are gated to the same capability). See §3.0 + the licensing reference.
+- **Per-feature licensing (v1.4.1):** carries `required_capability = security_workflows` → **requires `security_workflows` (Enterprise)** (the 17th security agent template; its `sse_*` tools are gated to the same capability). See §3.0 + the licensing reference.
 - **Hard dependency:** Splunk Security Essentials (`Splunk_Security_Essentials`). Advertised only when SSE is installed/visible; phase 1 also calls `sse_check_prerequisites` and STOPS if `ready=false`. The tactic, techniques, index and sourcetype are **parameters** — nothing is hard-coded to a specific tactic / technique / dataset.
-- **Workflow phases:** (1) prerequisite gate (`splunk_get_version` + `sse_check_prerequisites`); (2) resolve tactic + techniques (use `hunt_techniques`, or propose from `sse_list_content(mitre_tactic=…, has_search=true)` when blank); (3) ground each technique in SSE (`sse_list_content(mitre_technique=…)` → `sse_get_detection(include_json=true)` for the REAL detection SPL + lineage); (4) ground the data source (`splunk_list_indexes` + a `splunk_run_search` field probe; adapt datamodel SPL to a raw-`rex` form when the datamodel isn't populated); (5) time window via the **`demo-dataset-time-reanchor`** skill (existence-check `demo_dataset_windows`, re-anchor only on a positive index match, else honour `hunt_default_range`); (6) per-technique evidence + zero-evidence handling via the **`hunt-evidence-honesty`** skill (run the search for the hit count BEFORE building the tile; never a green zero — apply `hunt_zero_evidence`: broaden / drop / show-neutral / ask); (7) fan-out fidelity check for network-service-discovery techniques (T1046 — distinct-port/dest fan-out, exclude updater/browser noise); (8) process-discovery broadening (T1057 / T1518 — match the process-enumeration tooling family via `rex`); (9) build the Simple XML dashboard with the **`splunk_xml_*` builder** (route-unlock `dashboards-simplexml`; `splunk_xml_create` → `add_input` → `add_panel` × N → `publish`) — KPI row with per-technique tiles, one evidence panel per technique citing its SSE card, technique rollup, combined timeline, raw audit table, `| head 50` row-caps, `full_width` for the header/rollup/timeline; (10) static html intro panel (`add_panel viz="html"`); (11) validate + mandatory render-check (`splunk_xml_publish` → `splunk_get_dashboard_panel_data`, `response.ok=true` is the gate, `splunk_xml_update_panel` + re-publish to fix, max 3 attempts). Shape/escaping/HTML-placement/dual-axis basics come from the `dashboard-xml-discipline` skill, not this playbook.
+- **Workflow phases:** (1) prerequisite gate (`splunk_get_version` + `sse_check_prerequisites`); (2) resolve tactic + techniques (use `hunt_techniques`, or propose from `sse_list_content(mitre_tactic=…, has_search=true)` when blank); (3) ground each technique in SSE (`sse_list_content(mitre_technique=…)` → `sse_get_detection(include_json=true)` for the REAL detection SPL + lineage); (4) ground the data source (`splunk_list_indexes` + a `splunk_run_search` field probe; adapt datamodel SPL to a raw-`rex` form when the datamodel isn't populated); (5) time window via the **`demo-dataset-time-reanchor`** skill (existence-check `demo_dataset_windows`, re-anchor only on a positive index match, else honour `hunt_default_range`); (6) per-technique evidence + zero-evidence handling via the **`hunt-evidence-honesty`** skill (run the search for the hit count BEFORE building the tile; never a green zero: apply `hunt_zero_evidence`: broaden / drop / show-neutral / ask); (7) fan-out fidelity check for network-service-discovery techniques (T1046: distinct-port/dest fan-out, exclude updater/browser noise); (8) process-discovery broadening (T1057 / T1518: match the process-enumeration tooling family via `rex`); (9) build the Simple XML dashboard with the **`splunk_xml_*` builder** (route-unlock `dashboards-simplexml`; `splunk_xml_create` → `add_input` → `add_panel` × N → `publish`): KPI row with per-technique tiles, one evidence panel per technique citing its SSE card, technique rollup, combined timeline, raw audit table, `| head 50` row-caps, `full_width` for the header/rollup/timeline; (10) static html intro panel (`add_panel viz="html"`); (11) validate + mandatory render-check (`splunk_xml_publish` → `splunk_get_dashboard_panel_data`, `response.ok=true` is the gate, `splunk_xml_update_panel` + re-publish to fix, max 3 attempts). Shape/escaping/HTML-placement/dual-axis basics come from the `dashboard-xml-discipline` skill, not this agent template.
 - **Tools invoked:** `splunk_get_version`, `sse_check_prerequisites`, `sse_list_content`, `sse_get_detection`, `splunk_route_knowledge`, `splunk_search_knowledge`, `splunk_get_knowledge_entry` *(consults the knowledge layer for the sourcetype's field-extraction recipe — e.g. the `sysmon-xmlwineventlog-spath-extraction` static rule)*, `splunk_list_indexes`, `splunk_list_lookups`, `splunk_get_lookup_sample`, `splunk_run_search`, `splunk_list_visualizations`, `splunk_get_dashboard_xml`, `splunk_create_dashboard_xml`, `splunk_update_dashboard_xml`, `splunk_get_dashboard_panel_data`.
 - **Output artifacts:** 1 Simple XML coverage dashboard (persistent), with per-technique SSE lineage citations.
 - **Output style:** evidence-backed (counts quoted, no fabrication); uniform colour semantics (red == bad, never green for a zero); re-anchoring narrated as a feature when it fires.
 - **Naming:** uses the caller's hunt name verbatim; when blank, proposes a `*_aiworkbench` view name (not the AI Toolkit `*_aiworkbench` convention) and confirms before creating.
 - **Time-default guard (general, all Simple XML):** `validateDashboardXml` now REJECTS two locale/binding traps in an `<input type="time"><default>`: (a) a **slashed-date** literal (`08/20/2018:00:00:00`) — Splunk's time parser rejects MM/DD/YYYY (and DD/MM/YYYY) in non-US locales (en-GB etc.), so the picker shows "Invalid Value" and panels error "Invalid earliest_time"; (b) a **bare epoch** integer (`1534723200`) — renders in the picker but does NOT bind to `$tok.earliest$`/`$tok.latest$`, so panels silently return "No results" while "Open in Search" works. Locale-proof forms: **ISO 8601** (`2018-08-20T00:00:00`), relative (`-24h@h`), or `0` (all-time). Verified against `/services/search/timeparser`.
 - **Skills:** `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` • `read-only-by-default-soc` *(ES-gated — drops gracefully without ES; its read-only intent is also covered by `general-output-style` + `hunt-evidence-honesty`)* • `consult-security-knowledge-first` *(drives route → search → fetch so the sourcetype's extraction recipe + any SSE lineage come from the knowledge layer, not re-derivation)* • `hunt-evidence-honesty` • `demo-dataset-time-reanchor` • `feed-health-verdict` *(opt — drops when TrackMe absent)*.
-- **Knowledge layer:** the data-source extraction recipe is NOT baked into the prompt — it lives in the reusable `sysmon-xmlwineventlog-spath-extraction` static rule (`itmip_knowledge_static_rules`), which fires on any `XmlWinEventLog:*` / `Microsoft-Windows-Sysmon` / `WinEventLog` SPL and is consulted via `consult-security-knowledge-first`. The playbook keeps only a slim deterministic fallback (use `spath`, don't probe field-by-field) so it degrades gracefully if the model skips the consult.
+- **Knowledge layer:** the data-source extraction recipe is NOT baked into the prompt: it lives in the reusable `sysmon-xmlwineventlog-spath-extraction` static rule (`itmip_knowledge_static_rules`), which fires on any `XmlWinEventLog:*` / `Microsoft-Windows-Sysmon` / `WinEventLog` SPL and is consulted via `consult-security-knowledge-first`. The agent template keeps only a slim deterministic fallback (use `spath`, don't probe field-by-field) so it degrades gracefully if the model skips the consult.
 
 #### 3.2.4 Alerts & reports
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
-| **Build / improve an alert** | `creates-objects`, `alert-output`, `dashboard-output`, `spl`, `iterative`, `splunk-cloud-safe`, `requires-power-user` | Design a scheduled alert (cron, throttle, severity, email) AND ship a companion diagnostic dashboard so on-call has one click from email to investigation. Requires `power` or `admin` role. | alert name • dashboard name • trigger condition • evaluation cadence (cron) • time window • severity • email • throttle period • indexes / sources / sourcetypes |
+| **Build / improve an alert** | `creates-objects`, `alert-output`, `dashboard-output`, `spl`, `iterative`, `splunk-cloud-safe`, `requires-power-user` | Design a scheduled alert (cron, throttle, severity, email). With **Also build a proof dashboard** on, it also ships a companion diagnostic dashboard so on-call has one click from email to investigation. Requires `power` or `admin` role. | alert name • dashboard name • trigger condition • evaluation cadence (cron) • time window • severity • email • throttle period • indexes / sources / sourcetypes |
 | **Build / improve a report** | `creates-objects`, `report-output`, `spl`, `single-pass`, `splunk-cloud-safe` | Produce SPL plus a savedsearches.conf stanza for a Splunk report (`is_visible=1`) with schedule, visualization choice and sharing scope. | report name • question answered • audience • visualization • schedule (one-off / hourly / daily / weekly / monthly) • time range • indexes / sourcetypes • sharing scope |
 
 ##### Build / improve an alert — workflow detail
 
-- **Workflow phases:** (1) clarify trigger condition, cron, evaluation window, severity, email, throttle window, indexes / sourcetypes; (2) ground via `splunk_get_version` + `splunk_list_indexes` + `splunk_list_saved_searches`; (3) design SPL ending in a transforming command (`stats` / `eval` / `where`) so the result is "trigger rows only" (`>0 rows = alert fires`); (4) name-check alert (`<thing>_alert`) AND companion dashboard (`<thing>_dashboard`); (5) **create companion dashboard FIRST** via `splunk_create_dashboard_xml` — required panels: time picker (default -24h), KPI single (trigger-row count in window), timechart over time, detail table of recent trigger rows, static `<html>` panel explaining when the alert fires and how to investigate; (6) create alert via `splunk_create_alert` with cron / dispatch.earliest / dispatch.latest / `alert_condition="number of events"` / threshold / severity / suppress / email / description (must embed dashboard link `See dashboard: /<locale>/app/<app>/<dashboard_name>`); (7) self-correct (auto-validation), max 3 attempts per object; (8) deliver plain-language summary + links + throttle / severity reasoning.
+- **Workflow phases:** (1) clarify trigger condition, cron, evaluation window, severity, email, throttle window, indexes / sourcetypes; (2) ground via `splunk_get_version` + `splunk_list_indexes` + `splunk_list_saved_searches`; (3) design SPL ending in a transforming command (`stats` / `eval` / `where`) so the result is "trigger rows only" (`>0 rows = alert fires`); (4) name-check alert (`<thing>_alert`) AND, when the proof-dashboard switch is on, companion dashboard (`<thing>_dashboard`); (5) switch on: **create companion dashboard FIRST** via `splunk_create_dashboard_xml` — required panels: time picker (default -24h), KPI single (trigger-row count in window), timechart over time, detail table of recent trigger rows, static `<html>` panel explaining when the alert fires and how to investigate; (6) create alert via `splunk_create_alert` with cron / dispatch.earliest / dispatch.latest / `alert_condition="number of events"` / threshold / severity / suppress / email / description (must embed dashboard link `See dashboard: /<locale>/app/<app>/<dashboard_name>`); (7) self-correct (auto-validation), max 3 attempts per object; (8) deliver plain-language summary + links + throttle / severity reasoning.
 - **Tools invoked:** `splunk_get_version`, `splunk_list_indexes`, `splunk_list_saved_searches`, `splunk_list_visualizations`, `splunk_get_visualization_docs`, `splunk_create_dashboard_xml`, `splunk_create_alert`.
-- **Output artifacts:** 1 alert + 1 companion diagnostic dashboard (alert never ships alone).
-- **Output style:** dashboard mandatory; alert description embeds dashboard link; `splunk_get_dashboard_panel_data` recommended post-create.
+- **Output artifacts:** 1 alert, plus 1 companion diagnostic dashboard when **Also build a proof dashboard** is on (on by default for this agent template; the user can switch it off).
+- **Output style:** with the switch on, the alert description embeds the dashboard link and `splunk_get_dashboard_panel_data` is recommended post-create.
 
 ##### Build / improve a report — workflow detail
 
 - **Workflow phases:** (1) clarify scheduled vs ad-hoc, output (table / chart), drilldown, sharing scope, audience; (2) design SPL with same optimisation priorities as *Build a SPL search*; (3) propose `savedsearches.conf` config (`dispatch.earliest_time`, `dispatch.latest_time`, `cron_schedule`, `is_visible=1`, `displayview` / `vsid`, `acl`); (4) deliver SPL in ```` ```spl ```` block + conf stanza in ```` ```ini ```` block + viz recommendation.
-- **Tools invoked:** none — recommend-only (write tool not wired in this playbook).
+- **Tools invoked:** none: recommend-only (write tool not wired in this agent template).
 - **Output artifacts:** read-only — SPL + conf for user to apply manually.
 - **Output style:** single-pass.
 
 #### 3.2.5 Knowledge objects
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **Build / improve a lookup** | `creates-objects`, `lookup-output`, `single-pass`, `splunk-cloud-safe` | Design a CSV or KVStore lookup — schema, sample rows, lookups.conf / transforms.conf, optional automatic-lookup wiring — ready for manual upload. | lookup name • type (CSV / KVStore) • purpose • fields (`name\|type\|sample`) • match key • auto-apply (yes/no) • sourcetypes • case sensitivity |
 | **Build / improve a field extraction** | `creates-objects`, `extraction-output`, `single-pass`, `splunk-cloud-safe` | Author a tight regex field extraction from a sample event, validate captures via `rex`, and emit props.conf / transforms.conf stanzas. | sourcetype • sample raw event(s) • fields to extract • search-time vs index-time • existing extractions to preserve |
@@ -516,30 +526,30 @@ available playbooks and routing the user's question.
 
 #### 3.2.6 Data onboarding
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **Data onboarding helper** | `creates-objects`, `single-pass`, `splunk-cloud-safe`, `onboarding`, `requires-admin` | Guide a Splunk admin through bringing a new source online: inputs.conf, props.conf timestamp / line-merge tuning, sizing, and verification SPL. Requires `admin` role. | source description • where from (file / syslog / HEC / modular / forwarder / API) • format (JSON / CSV / syslog / key=value / unstructured) • sample events • volume • destination index • sourcetype • retention • PII / sensitive fields |
-| **Data Source Onboarding (full)** *(new in 1.5.0-dev)* | `creates-objects`, `package-output`, `onboarding`, `data-onboarding`; **`required_capability = data_onboarding` (Professional+)** | Turn a raw sample into a **deployment-ready 4-app config package** (a downloadable `.tar.gz`) via `splunk_generate_conf_package` — drafts the four apps, **validates every props/transforms stanza against the real `.conf.spec`** and computes a **0–100 Data Quality Score** (iterate if < 90), then delivers a download + the score + per-app summary + verification SPL. For an already-arriving feed it also runs `splunk_check_ingest_health` (the `data-onboarding-readiness` skill) to report any ingestion/parse errors. The recommend-only "Data onboarding helper" is kept alongside it. | sample raw events (required) • sourcetype • destination index • input type (file / syslog / HEC / modular / forwarder / API) • format • expected volume • CIM model intent • forwarder host pattern(s) • retention • PII / sensitive fields |
+| **Data Source Onboarding (full)** *(new in 1.5.0)* | `creates-objects`, `package-output`, `onboarding`, `data-onboarding`; **`required_capability = data_onboarding` (Professional+)** | Turn a raw sample into a **deployment-ready 4-app config package** (a downloadable `.tar.gz`) via `splunk_generate_conf_package`: drafts the four apps, **validates every props/transforms stanza against the real `.conf.spec`** and computes a **0–100 Data Quality Score** (iterate if < 90), then delivers a download + the score + per-app summary + verification SPL. For an already-arriving feed it also runs `splunk_check_ingest_health` (the `data-onboarding-readiness` skill) to report any ingestion/parse errors. The recommend-only "Data onboarding helper" is kept alongside it. | sample raw events (required) • sourcetype • destination index • input type (file / syslog / HEC / modular / forwarder / API) • format • expected volume • CIM model intent • forwarder host pattern(s) • retention • PII / sensitive fields |
 
 ##### Data onboarding helper — workflow detail
 
 - **Workflow phases:** (1) clarify source type (file / TCP / UDP / HEC / modular / forwarder), volume (eps, GB/day), format (JSON / CSV / syslog / unstructured), destination index, sourcetype; (2) design `inputs.conf` stanza (path, sourcetype, index, monitor settings), `props.conf` stanza (`LINE_BREAKER`, `SHOULD_LINEMERGE`, `TIME_PREFIX`, `TIME_FORMAT`, `TRUNCATE`, `MAX_TIMESTAMP_LOOKAHEAD`, `KV_MODE`), optional `transforms.conf` (filtering / routing / sourcetyping), index sizing recommendation; (3) validate timestamp / parse settings against the sample event the user pastes; (4) deliver stanzas grouped by file in ```` ```ini ```` blocks + sizing recommendation + verification SPL + common gotchas per source type.
-- **Includes skills (1.5.0-dev):** `data-onboarding-readiness` (if the feed already exists, call `splunk_check_ingest_health` and report the ingestion/parse verdict — correctness ≠ freshness) + `feed-health-verdict`.
+- **Includes skills (1.5.0):** `data-onboarding-readiness` (if the feed already exists, call `splunk_check_ingest_health` and report the ingestion/parse verdict; correctness ≠ freshness) + `feed-health-verdict`.
 - **Tools invoked:** none for the config-recommendation path (apply not wired); `splunk_check_ingest_health` *(opt — via `data-onboarding-readiness`, when licensed and the sourcetype is already arriving)*.
 - **Output artifacts:** read-only — conf stanzas + verification SPL.
 
-##### Data Source Onboarding (full) — workflow detail *(new in 1.5.0-dev)*
+##### Data Source Onboarding (full): workflow detail *(new in 1.5.0)*
 
-- **Includes skills:** `conf-package-discipline` (4-app layout, index-time vs search-time split, Magic-8 self-check, no-hallucinated-attribute grounding) + **`magic-8-compliance`** *(1.5.0-dev — validate every stanza against the real `.conf.spec`, then score; iterate if < 90)* + `data-onboarding-readiness` (correctness ≠ freshness — verify the feed actually parses) + `naming-collision-handling`.
-- **Workflow phases:** (1) GATHER — confirm the raw sample (required), target sourcetype/index, input type, volume, optional CIM intent and host-whitelist patterns; (2) ANALYSE the sample (single- vs multi-line, timestamp location/format, data shape, candidate fields); (3) EXISTENCE / COLLISION check (read-only) via `splunk_list_indexes` + a `splunk_run_search` probe; (4) DRAFT the four apps per `conf-package-discipline` (index-time on the indexer app, search-time on the search app) — **grounding attribute names in the knowledge layer** (route → search → fetch the `conf-spec` / `cim-data-models` connectors, which read the running install's authoritative `.conf.spec` + installed CIM); (5) **VALIDATE + SCORE** *(1.5.0-dev, per `magic-8-compliance`)* — run `splunk_validate_props_conf` + `splunk_validate_transforms_conf` on the drafted stanza bodies, FIX every `unknown_attribute` error, then `splunk_compute_data_quality_score(mode="generated", …)`; if the score is < 90, iterate the lowest dimensions, re-validate, re-score (max ~3 rounds); (6) GENERATE via `splunk_generate_conf_package(sourcetype, apps={…})`; (7) DELIVER — **lead with the Data Quality Score + letter grade and the per-dimension breakdown** (the procurement artifact), then the Download button under "Created in Splunk" (link ~1 hour) + one-line-per-app "what/where it deploys" summary + the Magic-8 status + sizing/retention note + verification SPL (`index=<idx> sourcetype=<st> | head 5`, then confirm `_time` parsed + fields extracted, and `splunk_check_ingest_health` is clean post-deploy). When the source is **already arriving** (re-onboarding / tuning an existing feed), `data-onboarding-readiness` runs `splunk_check_ingest_health` to read `index=_internal` for that sourcetype's ingestion/parse errors (as the system user) and report the verdict.
+- **Includes skills:** `conf-package-discipline` (4-app layout, index-time vs search-time split, Magic-8 self-check, no-hallucinated-attribute grounding) + **`magic-8-compliance`** *(1.5.0: validate every stanza against the real `.conf.spec`, then score; iterate if < 90)* + `data-onboarding-readiness` (correctness ≠ freshness: verify the feed actually parses) + `naming-collision-handling`.
+- **Workflow phases:** (1) GATHER: confirm the raw sample (required), target sourcetype/index, input type, volume, optional CIM intent and host-whitelist patterns; (2) ANALYSE the sample (single- vs multi-line, timestamp location/format, data shape, candidate fields); (3) EXISTENCE / COLLISION check (read-only) via `splunk_list_indexes` + a `splunk_run_search` probe; (4) DRAFT the four apps per `conf-package-discipline` (index-time on the indexer app, search-time on the search app), **grounding attribute names in the knowledge layer** (route → search → fetch the `conf-spec` / `cim-data-models` connectors, which read the running install's authoritative `.conf.spec` + installed CIM); (5) **VALIDATE + SCORE** *(1.5.0, per `magic-8-compliance`)*: run `splunk_validate_props_conf` + `splunk_validate_transforms_conf` on the drafted stanza bodies, FIX every `unknown_attribute` error, then `splunk_compute_data_quality_score(mode="generated", …)`; if the score is < 90, iterate the lowest dimensions, re-validate, re-score (max ~3 rounds); (6) GENERATE via `splunk_generate_conf_package(sourcetype, apps={…})`; (7) DELIVER: **lead with the Data Quality Score + letter grade and the per-dimension breakdown** (the procurement artifact), then the Download button under "Created in Splunk" (link ~1 hour) + one-line-per-app "what/where it deploys" summary + the Magic-8 status + sizing/retention note + verification SPL (`index=<idx> sourcetype=<st> | head 5`, then confirm `_time` parsed + fields extracted, and `splunk_check_ingest_health` is clean post-deploy). When the source is **already arriving** (re-onboarding / tuning an existing feed), `data-onboarding-readiness` runs `splunk_check_ingest_health` to read `index=_internal` for that sourcetype's ingestion/parse errors (as the system user) and report the verdict.
 - **Tools invoked:** `splunk_generate_conf_package`, `splunk_validate_props_conf`, `splunk_validate_transforms_conf`, `splunk_compute_data_quality_score`, `splunk_check_ingest_health`, `splunk_run_search`, `splunk_list_indexes`.
 - **Output artifacts:** a downloadable 4-app config package (`.tar.gz`; staged in `itmip_ai_artifact_packages`, not persisted into Splunk's knowledge layer) + a Data Quality Score + drafted stanzas shown in chat.
-- **Licensing / graceful degrade:** `required_capability = data_onboarding` (Professional+). Below Professional the generate + validate/score tools refuse with a clear license message (403); the playbook still hands over the drafted stanzas in chat so the work isn't lost. On Splunk Cloud the validators degrade gracefully (`spec_available=false`) — the `.conf.spec` files aren't readable there.
+- **Licensing / graceful degrade:** `required_capability = data_onboarding` (Professional+). Below Professional the generate + validate/score tools refuse with a clear license message (403); the agent template still hands over the drafted stanzas in chat so the work isn't lost. On Splunk Cloud the validators degrade gracefully (`spec_available=false`): the `.conf.spec` files aren't readable there.
 - **Output style:** single-pass (with a bounded validate/score iteration); Data Quality Score leads the delivery; per-source-type gotcha section mandatory.
 
 #### 3.2.7 Visualisation, correlation, enrichment
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **Data visualization helper** | `read-only`, `spl`, `single-pass`, `splunk-cloud-safe` | Recommend the right chart type for a given question / data-shape and emit SPL that produces the exact row shape the chart needs. | question • index / sourcetype / key fields • time dimension • categorical dimensions • numerical metric • audience • where shown |
 | **Data correlation helper** | `read-only`, `spl`, `single-pass`, `splunk-cloud-safe` | Design a multi-source correlation SPL (stats-by, streamstats, baseline + stdev) across data sets joined on a pivot entity, with performance reasoning. | correlation goal • source 1/2/3 (`index=`, `sourcetype=`, key field) • correlation key • time window • threshold • output (alert / dashboard / report) |
@@ -568,52 +578,50 @@ available playbooks and routing the user's question.
 
 #### 3.2.8a Authoring family
 
-Two new system playbooks let end users author their own private
-playbooks via natural language. Both ship at `sharing=global`,
-`creator=system`, and are visible to every user (unless an admin
-disables end-user authoring per Org via the deferred
-`itmip_authoring_policies` collection).
+Two system agent templates let end users author their own private
+agents via natural language (the two keep their original names, and so does their tag `playbook-output`). Both ship at `sharing=global`,
+`creator=system`, and are visible to every user.
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
-| **Create user playbook** | `creates-objects`, `playbook-output`, `iterative`, `splunk-cloud-safe`, `llm-mediated-authoring` | Describe a use case in plain English; the LLM creates a private playbook you own and can refine later. | what should this do • inputs to ask • create / recommend-only • (optional) closest existing playbook |
-| **Update user playbook** | `modifies-objects`, `playbook-output`, `iterative`, `splunk-cloud-safe`, `llm-mediated-authoring` | Refine a private playbook you own — change inputs, add or remove skills, adjust the workflow. | playbook name • what should change |
+| **Create your own agent** | `creates-objects`, `playbook-output`, `iterative`, `splunk-cloud-safe`, `llm-mediated-authoring` | Describe a use case in plain English; the LLM creates a private agent you own and can refine later. | what should this do • inputs to ask • create / recommend-only • (optional) closest existing agent |
+| **Update your own agent** | `modifies-objects`, `playbook-output`, `iterative`, `splunk-cloud-safe`, `llm-mediated-authoring` | Refine a private agent you own: change inputs, add or remove skills, adjust the workflow. | agent name • what should change |
 
-##### Create user playbook — workflow detail
+##### Create your own agent — workflow detail
 
-- **Workflow phases:** (1) parse the user's description for use-case category + artifact type; (2) fetch the closest existing playbook via `splunk_get_use_case_template_prompt` for structural reference; (3) call `splunk_list_skills` + `splunk_get_skill` to pick the right cross-cutting skills (never inline skill content); (4) compose body + question_text + includes_skills; (5) apply the `prompt-injection-defense-on-authored-content` skill — refuse scope-escalation / owner-spoof / skill-back-door / guardrail-bypass / role-elevation / system-impersonation patterns; (6) call `splunk_create_user_template` — the server enforces `sharing=private`, `owner_user=<caller>`, `required_roles=[]`, `dependent_apps=[]`, `is_default=false`, `is_general=false`, and runs the validation chain (field shapes, ASCII-only, skill-reference visibility, forbidden-content scan, quota, name-uniqueness with auto-suffix); (7) self-correct on `{ok:false, errors:[]}` envelope, max 3 attempts; (8) deliver a conversational summary including which skills were included and why.
+- **Workflow phases:** (1) parse the user's description for use-case category + artifact type; (2) fetch the closest existing agent via `splunk_get_use_case_template_prompt` for structural reference; (3) call `splunk_list_skills` + `splunk_get_skill` to pick the right cross-cutting skills (never inline skill content); (4) compose body + question_text + includes_skills; (5) apply the `prompt-injection-defense-on-authored-content` skill: refuse scope-escalation / owner-spoof / skill-back-door / guardrail-bypass / role-elevation / system-impersonation patterns; (6) call `splunk_create_user_template`: the server enforces `sharing=private`, `owner_user=<caller>`, `required_roles=[]`, `dependent_apps=[]`, `is_default=false`, `is_general=false`, and runs the validation chain (field shapes, ASCII-only, skill-reference visibility, forbidden-content scan, quota, name-uniqueness with auto-suffix); (7) self-correct on `{ok:false, errors:[]}` envelope, max 3 attempts; (8) deliver a conversational summary including which skills were included and why.
 - **Tools invoked:** `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt`, `splunk_list_skills`, `splunk_get_skill`, `splunk_route_tools` (for tool discovery), `splunk_create_user_template`.
-- **Output artifacts:** 1 private playbook (persisted in `itmip_ai_use_cases` with `sharing=private`, `owner_user=<caller>`).
+- **Output artifacts:** 1 private agent (persisted in `itmip_ai_use_cases` with `sharing=private`, `owner_user=<caller>`).
 - **Output style:** conversational; never repeats forbidden text verbatim into the persisted body; surfaces refusals plainly when the user's description includes them.
 
-##### Update user playbook — workflow detail
+##### Update your own agent — workflow detail
 
 - **Workflow phases:** (1) `splunk_get_use_case_template_prompt(name=<target>)` — the server refuses if `sharing != 'private'` OR `owner_user != caller`; (2) parse the change request against current state; (3) apply the same injection-defense skill — refuse scope changes, owner changes, admin-only skill includes; (4) compose a minimal patch; (5) call `splunk_update_user_template(name, patch)` — server independently re-checks ownership, forbidden fields, references, content; (6) self-correct on `{ok:false, errors:[]}`, max 3 attempts; (7) deliver a diff narrative ("I changed X, kept Y, refused Z").
 - **Tools invoked:** `splunk_get_use_case_template_prompt`, `splunk_list_skills`, `splunk_get_skill`, `splunk_route_tools`, `splunk_update_user_template`.
-- **Output artifacts:** 1 updated playbook (in place, sharing / owner_user preserved by server).
+- **Output artifacts:** 1 updated agent (in place, sharing / owner_user preserved by server).
 - **Output style:** diff narrative — never silently changes things the user didn't ask for.
 
 #### 3.2.8 AI Toolkit family
 
-All AI Toolkit playbooks declare `dependent_apps =
+All AI Toolkit agent templates declare `dependent_apps =
 [{name: "Splunk_ML_Toolkit", min_version: "5.0.0"}]` and the
-category `ai-toolkit`. They are dropped silently for users in tenants
+category `ai-toolkit`. They are dropped silently for users in Orgs and BUs
 where MLTK is not installed.
 
-> **Per-feature licensing (v1.4.1).** The **10 ML-*training* playbooks**
+> **Per-feature licensing (v1.4.1).** The **10 ML-*training* agent templates**
 > below carry `required_capability = ml_generation` → **requires
 > `ml_generation` (Professional)**: *Smart outlier detection (single
 > metric)*, *Multi-field anomaly detection*, *Smart forecasting*, *CDTSM
 > Smart Forecasting*, *CDTSM Anomaly Detection*, *CDTSM Predictive
 > Alerting*, *Smart clustering*, *Smart prediction (categorical or
 > numeric)*, *Outlier ALERT + diagnostic dashboard*, and *Audit &
-> refresh an existing ML use case*. The scoring/advisory playbooks that
+> refresh an existing ML use case*. The scoring/advisory agent templates that
 > don't *train* a model stay **open on every tier** (no `ml_generation`
 > gate): *Stats vs ML decision helper*, *Ask an external LLM (`ai`
 > command)*, *Bring your own ONNX model*, *Score against an AWS
 > SageMaker endpoint*. See §3.0 + the licensing reference.
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **AI Toolkit – Smart outlier detection (single metric)** | `creates-objects`, `saved-search-output`, `dashboard-output`, `model-output`, `ml`, `mltk`, `outlier`, `iterative`, `splunk-cloud-safe` | End-to-end DensityFunction outlier detector on one numeric field: training + scoring saved searches, globally-shared model, and a dual-axis verification dashboard. | index / sourcetype • numeric field • per-group field (optional) • collection window • risk tolerance (tight / balanced / loose) • alert (yes/no + cadence / email) • baseline notes |
 | **AI Toolkit – Multi-field anomaly detection** | `creates-objects`, `saved-search-output`, `dashboard-output`, `model-output`, `ml`, `mltk`, `outlier`, `anomaly`, `iterative`, `splunk-cloud-safe` | `MultivariateOutlierDetection` across 2+ numeric fields (StandardScaler+PCA+DensityFunction) when no single metric tells the whole story; ships scoring + per-field overlay dashboard. | index / sourcetype • numeric fields (≥2) • per-group field (optional) • training window • risk tolerance • alert (yes/no) |
@@ -630,14 +638,14 @@ where MLTK is not installed.
 | **AI Toolkit – CDTSM Anomaly Detection** (1.1.1) | `creates-objects`, `saved-search-output`, `dashboard-output`, `ml`, `mltk`, `cdtsm`, `anomaly`, `outlier`, `iterative`, `splunk-cloud-safe`, `pretrained` | Detect anomalies in a metric with CDTSM `mode=anomaly` (pre-trained, AI Toolkit 5.7.3+) — no training. Surfaces anomaly segments + bands; ships a saved search + proof dashboard with the Anomaly Detection Chart and TrackMe feed-health. | source (index AND sourcetype) • metric • aggregation • bucket size • detection window • sensitivity (tight / balanced / loose) • direction (spikes / drops / both) • per-group field (optional) • history window — the detection method (quantile / iqr_residual) is auto-selected from whether a per-group field is given, not asked |
 | **AI Toolkit – CDTSM Predictive Alerting** (1.1.1) | `creates-objects`, `saved-search-output`, `dashboard-output`, `alert-output`, `ml`, `mltk`, `cdtsm`, `forecast`, `alert`, `iterative`, `splunk-cloud-safe`, `pretrained`, `requires-power-user` | Alert **before** a metric crosses a threshold — CDTSM forecasts ahead and a scheduled alert fires when the forecast crosses, with lead time to act. Ships a saved search + dashboard + scheduled alert. Requires `power`/`admin`. | source • metric • aggregation • bucket size • threshold value • direction (upper / lower) • lead time • alert cadence • severity • email (optional) • throttle period |
 
-> **Common shape across all AI Toolkit playbooks** — model names follow
+> **Common shape across all AI Toolkit agent templates**: model names follow
 > the literal pattern `mltk_<algo>_<thing>_aiworkbench_v<N>` (the `_aiworkbench_v<N>`
 > suffix is **required** so `splunk_share_mltk_model_globally` recognises
 > the row in the audit registry). Saved-search names follow `_train_v1` /
-> `_score_v1`, dashboard follows `_dashboard`. Every playbook
+> `_score_v1`, dashboard follows `_dashboard`. Every agent template
 > stdev-falls-back gracefully when Splunk_ML_Toolkit is absent.
 
-> **Common shape across CDTSM playbooks** (1.1.1) — CDTSM is pre-trained
+> **Common shape across CDTSM agent templates** (1.1.1): CDTSM is pre-trained
 > and generative; there is no `fit`, no model object, and no
 > `splunk_share_mltk_model_globally` call. Saved-search names follow
 > `cdtsm_<purpose>_<thing>_aiworkbench_v<N>` (purpose: `forecast`, `anomaly`,
@@ -690,7 +698,7 @@ where MLTK is not installed.
 
 ##### AI Toolkit – Stats vs ML decision helper — workflow detail
 
-- **Workflow phases:** (1) understand question (anomaly definition, risk tolerance, history available + labelled, per-group dimension); (2) explore via `splunk_run_search` (distribution, seasonality, cardinality, null fraction); (3) score each candidate on a rubric — static stdev / IQR / `DensityFunction` / `MultivariateOutlierDetection` / forecast-residual / `LocalOutlierFactor` — table of "yes / no + why" per user case; (4) recommend ONE with justification grounded in observed data; (5) show training + scoring SPL for the chosen approach but **do NOT persist** — recommend-only; (6) suggest the follow-up playbook ("ask 'go ahead and build AI Toolkit smart outlier detection for X' and I'll run the full playbook").
+- **Workflow phases:** (1) understand question (anomaly definition, risk tolerance, history available + labelled, per-group dimension); (2) explore via `splunk_run_search` (distribution, seasonality, cardinality, null fraction); (3) score each candidate on a rubric: static stdev / IQR / `DensityFunction` / `MultivariateOutlierDetection` / forecast-residual / `LocalOutlierFactor`: table of "yes / no + why" per user case; (4) recommend ONE with justification grounded in observed data; (5) show training + scoring SPL for the chosen approach but **do NOT persist**: recommend-only; (6) suggest the follow-up agent ("ask 'go ahead and build AI Toolkit smart outlier detection for X' and I'll run the full agent").
 - **Tools invoked:** `splunk_run_search`.
 - **Output artifacts:** read-only — recommendation + SPL preview.
 - **Output style:** rubric table mandatory; ONE clear recommendation.
@@ -732,15 +740,15 @@ where MLTK is not installed.
 
 ### 3.3 Stage: `draft`
 
-Draft playbooks are hidden from end users by default. Admins can
-preview them via the Playbooks tab's *Show drafts* toggle. They ship
+Agent templates in preview are hidden from end users. Admins see
+them in the **Draft** group of the **Agents** tab. They ship
 as `draft` either because the underlying pipeline still has known
 failure modes (Studio) or because they need more in-the-wild
 hardening before promotion.
 
 #### 3.3.1 Dashboard Studio
 
-| Playbook | Categories | Tags | Short description | Question-text inputs |
+| Agent template | Categories | Tags | Short description | Question-text inputs |
 |---|---|---|---|---|
 | **Build a Dashboard Studio JSON dashboard** | `dashboards` | `creates-objects`, `dashboard-output`, `studio-json`, `spl`, `iterative`, `splunk-cloud-safe` | **[DRAFT — Builder tools work, but render-validation false positives + edge-case Studio shapes still bite. Use Simple XML for production dashboards until promoted.]** Compose a Dashboard Studio (v2) dashboard via the `splunk_builder_*` tools (never raw JSON), version-aware viz selection, and publish with full render validation. | dashboard name • description • indexes / sourcetypes • time picker + default • form inputs (host, sourcetype, …) • panels (viz + data source) • layout (absolute / grid) • theme (light / dark) |
 
@@ -756,38 +764,38 @@ hardening before promotion.
 
 #### 3.3.2 Troubleshooting & investigation
 
-| Playbook | Categories | Tags | Short description | Question-text inputs |
+| Agent template | Categories | Tags | Short description | Question-text inputs |
 |---|---|---|---|---|
 | **Data troubleshooting helper** | `troubleshooting` | `read-only`, `iterative`, `splunk-cloud-safe`, `troubleshoot`, `metric-aware` | Debug "events missing / wrong timestamps / multi-line broken / zero results / slow searches / lookups failing" — handles metric vs event indexes and TrackMe feed-health pre-flight. | symptom • when started • scope (one host / source / all) • sample `_raw` • SPL or config • what's been tried • Splunk version |
 | **Investigation** | `investigation` | `read-only`, `iterative`, `splunk-cloud-safe`, `metric-aware` | Multi-angle correlation given main indexes + a field of interest: profiles the field, checks TrackMe health, pivots into other event indexes, correlates metric indexes, surfaces recent change + ES / ITSI signals. | main indexes • field of interest • specific value (or "any") • time window • metric indexes (optional) • pivot fields (optional) • question behind question • things to rule out |
 
 ##### Data troubleshooting helper — workflow detail
 
-- **Workflow phases:** (1) clarify symptom in operational terms (not arriving / wrong timestamps / multi-line broken / zero results / slow / extractions fail / lookup fails / other); (2) check for better-fitting playbook via `splunk_list_use_case_templates` (zero results → TrackMe Empty-result; red KPI → ITSI Diagnose; notable → ES Triage; ML dashboard → AI Toolkit Audit); (3) ground — ask for sample `_raw`, SPL / config, when started, scope; `splunk_list_indexes` to detect **metric vs event** index (CRITICAL: metric needs `| mstats` / `| mcatalog`, not `search`); (4) feed-health pre-flight when TrackMe installed — `trackme_health_for_indexes`, `trackme_list_acks`, `trackme_list_maintenance`; (5) diagnose in order — ingest (splunkd / forwarder / license), timestamps (`TIME_PREFIX` / `TIME_FORMAT` / `MAX_TIMESTAMP_LOOKAHEAD`), multi-line (`SHOULD_LINEMERGE` / `LINE_BREAKER` / `BREAK_ONLY_BEFORE`), zero results (`btool`, ACL, `| head 1`, drop filters one at a time, `| mcatalog values(metric_name)` for metric indexes), slow searches (job inspector / sub-search / regex), extractions (test `| rex` standalone); (6) propose fix; verify via `splunk_run_search` when applicable; (7) deliver diagnosis + explicit feed-health verdict + explicit event-vs-metric verdict + fix + verification SPL + prevention.
+- **Workflow phases:** (1) clarify symptom in operational terms (not arriving / wrong timestamps / multi-line broken / zero results / slow / extractions fail / lookup fails / other); (2) check for better-fitting agent via `splunk_list_use_case_templates` (zero results → TrackMe Empty-result; red KPI → ITSI Diagnose; notable → ES Triage; ML dashboard → AI Toolkit Audit); (3) ground: ask for sample `_raw`, SPL / config, when started, scope; `splunk_list_indexes` to detect **metric vs event** index (CRITICAL: metric needs `| mstats` / `| mcatalog`, not `search`); (4) feed-health pre-flight when TrackMe installed: `trackme_health_for_indexes`, `trackme_list_acks`, `trackme_list_maintenance`; (5) diagnose in order: ingest (splunkd / forwarder / license), timestamps (`TIME_PREFIX` / `TIME_FORMAT` / `MAX_TIMESTAMP_LOOKAHEAD`), multi-line (`SHOULD_LINEMERGE` / `LINE_BREAKER` / `BREAK_ONLY_BEFORE`), zero results (`btool`, ACL, `| head 1`, drop filters one at a time, `| mcatalog values(metric_name)` for metric indexes), slow searches (job inspector / sub-search / regex), extractions (test `| rex` standalone); (6) propose fix; verify via `splunk_run_search` when applicable; (7) deliver diagnosis + explicit feed-health verdict + explicit event-vs-metric verdict + fix + verification SPL + prevention.
 - **Tools invoked:** `splunk_list_indexes`, `splunk_get_version`, `splunk_list_use_case_templates`, `trackme_health_for_indexes`, `trackme_list_acks`, `trackme_list_maintenance` (all TrackMe tools optional), `splunk_run_search`.
 - **Output artifacts:** read-only — diagnosis + fix + verification SPL.
 - **Output style:** feed-health verdict explicit (cause or ruled out); metric-vs-event index distinction critical; negative space (what was checked clean) included.
 
 ##### Investigation — workflow detail
 
-- **Workflow phases:** (1) understand target — main event index(es), field of interest, specific value or "any", time window; `splunk_list_indexes` once (capture datatype: event vs metric); (2) profile field via `splunk_run_search` (top values + cardinality + timechart) — use `mstats` if main index is metric; (3) TrackMe health when installed — `trackme_health_for_indexes` on every main index, `trackme_list_acks`, `trackme_list_maintenance`; (4) correlated events in OTHER event indexes — pick 2–3 pivot fields (host, src, dest, user, src_ip, dest_ip, account, session_id, container_id, transaction_id, request_id, trace_id); for each non-main event index visible run a small `splunk_run_search` joined by pivot; (5) correlated metrics in metric indexes — `splunk_list_metrics` / `| mcatalog` to discover metric names, then `| mstats avg(<m>) WHERE …`; catch metric anomalies that co-occurred but the user didn't ask about; (6) recent change — if a change-management index is visible, look for changes in window touching pivot entities; also `splunk_run_search index=_internal source=*splunkd.log host=<h> log_level=ERROR`; (7) related ES + ITSI signals — `es_list_notables`, `itsi_list_episodes`, `itsi_get_episode` (only if those apps installed); (8) synthesise narrative with explicit "what was checked CLEAN" list; (9) **proof dashboard mandatory** via `splunk_create_dashboard_xml` named `investigation_<pivot>_<yyyymmdd>_aiworkbench` — required panels include feed-health, field profile, cross-index correlation, metric correlation, recent change, ES / ITSI signals, `<html>` summary with ranked hypotheses; then `splunk_get_dashboard_panel_data` + `splunk_update_dashboard_xml` for fix loop, max 3 attempts; (10) offer to save SPL as saved searches (dashboard is non-optional, SPL is per-user choice).
+- **Workflow phases:** (1) understand target — main event index(es), field of interest, specific value or "any", time window; `splunk_list_indexes` once (capture datatype: event vs metric); (2) profile field via `splunk_run_search` (top values + cardinality + timechart) — use `mstats` if main index is metric; (3) TrackMe health when installed — `trackme_health_for_indexes` on every main index, `trackme_list_acks`, `trackme_list_maintenance`; (4) correlated events in OTHER event indexes — pick 2–3 pivot fields (host, src, dest, user, src_ip, dest_ip, account, session_id, container_id, transaction_id, request_id, trace_id); for each non-main event index visible run a small `splunk_run_search` joined by pivot; (5) correlated metrics in metric indexes — `splunk_list_metrics` / `| mcatalog` to discover metric names, then `| mstats avg(<m>) WHERE …`; catch metric anomalies that co-occurred but the user didn't ask about; (6) recent change — if a change-management index is visible, look for changes in window touching pivot entities; also `splunk_run_search index=_internal source=*splunkd.log host=<h> log_level=ERROR`; (7) related ES + ITSI signals — `es_list_notables`, `itsi_list_episodes`, `itsi_get_episode` (only if those apps installed); (8) synthesise narrative with explicit "what was checked CLEAN" list; (9) **proof dashboard when Also build a proof dashboard is on** via `splunk_create_dashboard_xml` named `investigation_<pivot>_<yyyymmdd>_aiworkbench` — required panels include feed-health, field profile, cross-index correlation, metric correlation, recent change, ES / ITSI signals, `<html>` summary with ranked hypotheses; then `splunk_get_dashboard_panel_data` + `splunk_update_dashboard_xml` for fix loop, max 3 attempts; (10) offer to save SPL as saved searches (the dashboard follows the switch, SPL is per-user choice).
 - **Tools invoked:** `splunk_list_indexes`, `splunk_run_search`, `splunk_list_metrics` (optional), `trackme_health_for_indexes`, `trackme_list_acks`, `trackme_list_maintenance`, `es_list_notables`, `itsi_list_episodes`, `itsi_get_episode`, `splunk_create_dashboard_xml`, `splunk_get_dashboard_panel_data`, `splunk_update_dashboard_xml`, `splunk_create_saved_search` (optional).
-- **Output artifacts:** 1 proof dashboard (mandatory) + optional saved searches.
+- **Output artifacts:** the investigation summary, 1 proof dashboard when the switch is on, and optional saved searches.
 - **Output style:** never fabricate; ranked hypotheses with evidence weight; negative space critical; HTML headings in `<panel><html>` only.
 
 #### 3.3.3 Enterprise Security (ES) family
 
-All ES playbooks declare `dependent_apps =
+All ES agent templates declare `dependent_apps =
 [{name: "SplunkEnterpriseSecuritySuite"}]` and category
 `security-soc`.
 
-> **Per-feature licensing (v1.4.1).** All **9 ES playbooks** below carry
+> **Per-feature licensing (v1.4.1).** All **9 ES agent templates** below carry
 > `required_capability = security_workflows` → **requires
-> `security_workflows` (Enterprise)** (part of the 17 security playbooks;
+> `security_workflows` (Enterprise)** (part of the 17 security agent templates;
 > the `es_*` tools they invoke are gated to the same capability). See
 > §3.0 + the licensing reference.
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **ES — Triage a notable** | `read-only`, `iterative`, `splunk-cloud-safe`, `soc`, `siem`, `notable`, `risk`, `threat-intel` | Walk one Enterprise Security notable from queue to verdict with parallel asset / identity / threat / risk enrichment and a feed-health caveat. | `event_id` (or blank to list recent) • context • permission scope (propose / recommend-only) |
 | **ES — Investigate a user** | `read-only`, `iterative`, `splunk-cloud-safe`, `soc`, `siem`, `risk` | Build a 360° view of a username — identity, risk trajectory, auth + endpoint behaviour, peer outlier flag, recent notables — with feed-health caveats. | username • time window (default 24h auth, 7d risk) • context |
@@ -799,7 +807,7 @@ All ES playbooks declare `dependent_apps =
 | **ES — Daily SOC handoff summary** | `read-only`, `single-pass`, `splunk-cloud-safe`, `soc`, `siem`, `notable`, `risk`, `threat-intel` | Start-of-shift briefing: open critical / high notables, unowned queue, top risk movers in 24h, fresh TI matches and TrackMe feed-health notes. | emphasis field (optional) • time window (default 24h) |
 | **ES — Tune a noisy correlation search** | `read-only`, `iterative`, `splunk-cloud-safe`, `soc`, `siem` | Quantify false-positive rate of a named correlation search over 30d and propose suppress-field / whitelist / severity-downgrade tuning options the analyst applies. | correlation search name (exact) • target firings per day after tuning • known benign sources (one per line) |
 
-> **Common shape across all ES playbooks** — read-only by default; verdicts
+> **Common shape across all ES agent templates**: read-only by default; verdicts
 > are *evidence-backed* (no fabrication); feed-health caveats from TrackMe
 > are surfaced explicitly when TrackMe is installed; mutation tools
 > (`es_update_notable`, `es_add_investigation_note`) only ever fire after
@@ -870,16 +878,16 @@ All ES playbooks declare `dependent_apps =
 
 #### 3.3.4 ITSI family
 
-All ITSI playbooks declare `dependent_apps = [{name: "SA-ITOA"}]`
+All ITSI agent templates declare `dependent_apps = [{name: "SA-ITOA"}]`
 and category `service-management`.
 
-> **Per-feature licensing (v1.4.1).** All **7 ITSI playbooks** below
+> **Per-feature licensing (v1.4.1).** All **7 ITSI agent templates** below
 > carry `required_capability = security_workflows` → **requires
-> `security_workflows` (Enterprise)** (part of the 17 security playbooks;
+> `security_workflows` (Enterprise)** (part of the 17 security agent templates;
 > the `itsi_*` tools they invoke are gated to the same capability). See
 > §3.0 + the licensing reference.
 
-| Playbook | Tags | Short description | Question-text inputs |
+| Agent template | Tags | Short description | Question-text inputs |
 |---|---|---|---|
 | **ITSI — Diagnose service degradation** | `read-only`, `iterative`, `splunk-cloud-safe`, `itsi`, `kpi`, `topology` | Flagship ITSI flow: for a degraded service trace health score, red KPIs, KPI search feed-health, dependency topology, recent episodes and recent change to identify root cause. | service name or `_key` • when degradation started • context (maintenance / deploy / peer red) |
 | **ITSI — Root-cause an episode** | `read-only`, `iterative`, `splunk-cloud-safe`, `itsi`, `episode`, `kpi` | Given an ITSI episode `group_id`, reconstruct grouped events, affected entities / services, correlated KPI dips, NEAP grouping policy and recent change to rank root causes. | episode `group_id` • hypothesis to test (optional) • permission scope (propose / recommend-only) |
@@ -889,7 +897,7 @@ and category `service-management`.
 | **ITSI — Episode triage queue summary** | `read-only`, `single-pass`, `splunk-cloud-safe`, `itsi`, `episode` | Shift handoff for ITSI: open episodes by severity, oldest unowned, most-impacted services and TrackMe feed-health splits (service vs data driven). | emphasis field (optional) • window for "open" episodes |
 | **ITSI — Entity health check** | `read-only`, `iterative`, `splunk-cloud-safe`, `itsi`, `kpi` | Read-only entity inspection: which services it belongs to, which KPIs it contributes to, recent KPI values and feed-health caveats. | entity name or `_key` • recent-values window (default 6h) |
 
-> **Common shape across all ITSI playbooks** — read-only by default;
+> **Common shape across all ITSI agent templates**: read-only by default;
 > mutation tools (`itsi_update_episode`) only fire after explicit user
 > confirmation; the "service broken vs data broken" distinction is
 > surfaced explicitly when TrackMe is installed.
@@ -945,10 +953,10 @@ and category `service-management`.
 
 #### 3.3.5 TrackMe family
 
-All TrackMe playbooks declare `dependent_apps = [{name: "trackme"}]`
+All TrackMe agent templates declare `dependent_apps = [{name: "trackme"}]`
 plus app combinations where noted.
 
-> **Per-feature licensing (v1.7.1).** The TrackMe playbooks are not
+> **Per-feature licensing (v1.7.1).** The TrackMe agent templates are not
 > capability-tagged, and as of v1.7.1 the `trackme_*` feed-health tools
 > they drive are available on **every tier (incl. Personal)** — the
 > former `in_splunk_awareness` (Professional) gate is **deprecated and
@@ -957,7 +965,7 @@ plus app combinations where noted.
 > tools still need `security_workflows` (Enterprise) for those calls.
 > See §3.0 + the licensing reference §2.2 (row 9).
 
-| Playbook | Dependencies | Categories | Tags | Short description | Question-text inputs |
+| Agent template | Dependencies | Categories | Tags | Short description | Question-text inputs |
 |---|---|---|---|---|---|
 | **TrackMe — Morning data-health check** | trackme | `data-platform` | `read-only`, `single-pass`, `splunk-cloud-safe`, `trackme`, `feed-health`, `workload` | Start-of-day data-platform briefing: red / orange entities by tenant + component, 24h anomalies, active acks / maintenance and workload movers. | emphasis field (optional) • focus tenant (default all) |
 | **TrackMe — Empty-result investigator** | trackme | `data-platform`, `troubleshooting` | `read-only`, `iterative`, `splunk-cloud-safe`, `trackme`, `feed-health`, `troubleshoot` | When a user's SPL returns zero rows, decide whether the feed is broken or the data really is empty — `anomaly_reason`, acks, owner card and inflection point included. | SPL that returned zero • time range • expected data |
@@ -1013,26 +1021,24 @@ plus app combinations where noted.
 ### 3.5 Default skill catalogue
 
 **Skills** are reusable "do-it-correctly" prose blocks referenced by
-playbooks via the new `includes_skills` field. They factor cross-cutting
+agents via the new `includes_skills` field. They factor cross-cutting
 rules (no emojis, dashboard token discipline, MLTK `aiworkbench` naming,
-TrackMe feed-health verdict, ...) out of individual playbooks so each
+TrackMe feed-health verdict, ...) out of individual agents so each
 rule lives in **exactly one place** and the engineering cost of
-"find every playbook that mentions dashboards and update it to also
+"find every agent that mentions dashboards and update it to also
 say X" drops to zero.
 
 Skills are pure prose. They reference tools by name but never invoke
 them — the runtime concatenates skill bodies into the assembled
-`prompt_text` at fetch time. See
-the design specification
-for the full design rationale.
+`prompt_text` at fetch time.
 
-#### 3.5.1 How skills, playbooks, and tools fit together
+#### 3.5.1 How skills, agents, and tools fit together
 
-![How skills, playbooks and tools become one prompt](../img/prompt-assembly.svg)
+![How skills, agents and tools become one prompt](../img/prompt-assembly.svg)
 
-The guardrail is prepended to every conversation. A playbook names the skills it
-wants; those skill bodies are resolved and injected when the playbook is fetched,
-so the assembled prompt is guardrail, then skills, then the playbook body and
+The guardrail is prepended to every conversation. An agent names the skills it
+wants; those skill bodies are resolved and injected when the agent is fetched,
+so the assembled prompt is guardrail, then skills, then the agent body and
 your question. Tools are not part of the prompt text — they are the functions the
 model may call while it works.
 
@@ -1040,37 +1046,36 @@ model may call while it works.
 
 | Layer | Stores | Answers the question | Examples |
 |---|---|---|---|
-| **Playbook** | `itmip_ai_use_cases` | *What to do?* (the workflow, the form inputs, the artifact names for this specific use case) | "Build a Simple XML dashboard", "ES — Triage a notable" |
-| **Skill** | `itmip_ai_skills` (NEW) | *How to do it correctly?* (the cross-cutting rule reused by many playbooks) | "no emojis", "token discipline", "MLTK aiworkbench naming + global share" |
+| **Agent** | `itmip_ai_use_cases` | *What to do?* (the workflow, the form inputs, the artifact names for this specific use case) | "Build a Simple XML dashboard", "ES — Triage a notable" |
+| **Skill** | `itmip_ai_skills` (NEW) | *How to do it correctly?* (the cross-cutting rule reused by many agents) | "no emojis", "token discipline", "MLTK aiworkbench naming + global share" |
 | **Tool** | `tools.ts` + `itmip_llm_custom_tools` + `itmip_mcp_tools` | *What to call?* (the executable function) | `splunk_run_search`, `splunk_create_dashboard_xml`, `es_update_notable` |
 
 The runtime auto-prepends `general-output-style` to every operational
-playbook (except General and Default themselves), then concatenates the
-playbook's `includes_skills` in declaration order, then the playbook
+agent (except General and Default themselves), then concatenates the
+agent's `includes_skills` in declaration order, then the agent
 body. Dropped skills (e.g. `feed-health-verdict` when TrackMe is not
 installed) emit a one-line `> Skill X dropped: <reason>` note in the
 assembled prompt so the LLM can adjust narrative.
 
 #### 3.5.2 Lifecycle + scoping
 
-Skills mirror playbooks exactly:
+Skills mirror agents exactly:
 
-- **Seeded on first load** from `src/services/skillSeeds.ts` (18
-  entries — see §3.5.3). Auto-refreshed in place for entries that are
+- **Seeded on first load** (see §3.5.3). Auto-refreshed in place for entries that are
   still `creator=system`, `updated_by=system`, `version=1`.
 - **Admin-edited rows are immune to seed-refresh.** Once an admin
   edits, `version > 1` and the auto-refresh leaves the entry alone.
-- **Tenant scope** (`org_short` / `bu_short`) follows the same rules
-  as playbooks — `DFLT / DFLT` is global, narrower scopes are visible
-  to matching callers + admins. See [§2.5](#25-scoping-use-case-playbooks).
+- **Org / BU scope** (`org_short` / `bu_short`) follows the same rules
+  as agents: `DFLT / DFLT` is global, narrower scopes are visible
+  to matching callers + admins. See [§2.5](#25-scoping-agents).
 - **`dependent_apps`** — skills targeting MLTK / ES / ITSI / TrackMe
-  carry the same dependency declarations playbooks use. A missing
+  carry the same dependency declarations agents use. A missing
   dependency causes the skill to be silently dropped at prompt-assembly
   time and replaced with a one-line note.
 - **`dependent_tools`** — optional. If listed, the skill is dropped
-  when the named tool is disabled for the resolved tenant.
+  when the named tool is disabled for the resolved Org and BU.
 - **`status`** = `operational` / `draft` / `deleted`. Draft skills
-  are visible only to admins, same as draft playbooks.
+  are visible only to admins, same as agent templates in preview.
 
 Skills inherit the KVStore backup / change-log treatment from §2.6 —
 the new `itmip_ai_skills` collection is added to both
@@ -1079,51 +1084,79 @@ the new `itmip_ai_skills` collection is added to both
 `itmip_llm_kvstore_changelog.py`
 `TRACKED_COLLECTIONS`.
 
-#### 3.5.3 The 27 default skills
+#### 3.5.3 The 53 default skills
+
+The build ships 53 skills: 52 operational and one in preview (`dashboard-studio-versioning`),
+which only administrators see. The **used by** column counts the agent templates whose
+`includes_skills` names the skill; *(preview)* marks an agent template in preview.
 
 | # | name | title | tags | dep_apps | used by |
 |---|---|---|---|---|---|
-| 1 | `general-output-style` | General output style rules | guardrail, output-style | — | (auto-included by every operational playbook that is not General / Default) |
-| 2 | `spl-perf-priorities` | SPL performance priorities | spl, performance | — | every SPL-authoring playbook (search, alert, MLTK custom-SPL, investigation, etc.) |
-| 3 | `spl-validation-loop` | SPL validation + self-correct loop | spl, validation, iterative | — | every playbook that runs SPL before persisting |
-| 4 | `dashboard-xml-discipline` | Simple XML dashboard discipline | dashboard, simplexml | — | every playbook that emits Simple XML |
-| 5 | `dashboard-xml-validation-loop` | Simple XML dashboard validation + render-check loop | dashboard, simplexml, validation | — | every playbook that persists a Simple XML dashboard |
-| 6 | `dashboard-studio-versioning` | Dashboard Studio version-awareness | dashboard, studio, version-aware | — | Build a Dashboard Studio JSON dashboard (draft) |
-| 7 | `dashboard-proof-required` | Every artifact implies a proof dashboard | dashboard, proof | — | alert playbook, all AI Toolkit creation playbooks, Investigation |
-| 8 | `viz-best-fit` | Visualization best-fit selection | visualization, dashboard | — | every dashboard-emitting playbook |
-| 9 | `alert-companion-dashboard` | Alerts never ship alone — companion dashboard mandatory | alert, dashboard | — | Build / improve an alert, AI Toolkit – Outlier ALERT + diagnostic dashboard |
-| 10 | `ml-aiworkbench-naming-and-share` | MLTK aiworkbench naming + global share handler | mltk, ml, naming, audit | Splunk_ML_Toolkit ≥ 5.0.0 | every AI Toolkit creation playbook (single, multi, forecast, cluster, prediction, ONNX, SageMaker, ai, outlier ALERT, audit & refresh) |
-| 11 | `ml-data-readiness-precheck` | MLTK data-readiness pre-check | mltk, ml, exploration | Splunk_ML_Toolkit ≥ 5.0.0 | every AI Toolkit creation playbook + Stats vs ML decision helper |
-| 12 | `ml-self-correct-budget` | MLTK self-correct loop (max 3 attempts per object) | mltk, ml, iterative, budget | Splunk_ML_Toolkit ≥ 5.0.0 | every AI Toolkit creation playbook |
-| 13 | `feed-health-verdict` | TrackMe feed-health pre-flight + explicit verdict | trackme, feed-health, diagnostic | trackme | every TrackMe playbook, every ES playbook *(opt)*, most ITSI playbooks *(opt)*, Data troubleshooting, Investigation |
-| 14 | `metric-vs-event-index-aware` | Metric vs event index awareness (`mstats` / `mcatalog`) | spl, metric | — | SPL playbooks, Data troubleshooting, Investigation, Data correlation, TrackMe — Empty-result investigator |
-| 15 | `read-only-by-default-soc` | Read-only by default for SOC / SecOps work | soc, es, read-only, gated | SplunkEnterpriseSecuritySuite | every ES playbook |
-| 16 | `read-only-by-default-itops` | Read-only by default for ITSI work | itsi, itops, read-only, gated | SA-ITOA | every ITSI playbook, TrackMe — ITSI KPI root-cause assistant |
-| 17 | `data-vs-service-distinction` | "Data broken vs service broken" — two-verdict rule | itsi, trackme, verdict, diagnostic | trackme | TrackMe playbooks that interpret ITSI red states, most ITSI playbooks |
-| 18 | `naming-collision-handling` | Knowledge object name-collision handling | naming, gated | — | every playbook that persists a saved search / dashboard / alert / model |
-| **19** | `playbook-authoring-discipline` | Playbook authoring discipline (composition + skill inclusion + scope/ownership rules + refusal patterns for cross-cutting authoring concerns) | authoring, discipline, read-only | — | Create user playbook • Update user playbook |
-| **20** | `prompt-injection-defense-on-authored-content` | Refusal patterns for prompt-injection content inside untrusted user authoring descriptions (scope-escalation, owner-spoof, skill-back-door, guardrail-bypass, role-elevation, system-impersonation) | safety, authoring, prompt-injection-defense | — | Create user playbook • Update user playbook |
-| 21 | `consult-security-knowledge-first` | Consult the knowledge layer for security-flavoured tasks | knowledge, routing, soc, security, bootstrap | — | every ES playbook, ATT&CK Tactic Hunt *(route → search → fetch before authoring SPL for security tasks)* |
-| 22 | `cdtsm-discipline` | Cisco Deep Time Series Model (CDTSM) discipline | ml, mltk, cdtsm, pretrained, discipline | Splunk_ML_Toolkit ≥ 5.0.0 | the three AI Toolkit – CDTSM playbooks (Smart Forecasting, Anomaly Detection, Predictive Alerting) |
-| **23** | `hunt-evidence-honesty` | Hunt evidence honesty — zero-evidence and detection-tile colour rules | soc, mitre, threat-hunting, dashboard, output-style, honesty | — | ATT&CK Tactic Hunt; reusable by any hunt / coverage / detection-dashboard playbook |
-| **24** | `demo-dataset-time-reanchor` | Demo dataset time re-anchoring — map relative windows onto a fixed dataset's active period | spl, time, dashboard, demo, data-awareness | — | ATT&CK Tactic Hunt; reusable by any playbook that sets a time range over a fixed-window demo / training / CTF dataset |
-| **25** | `conf-package-discipline` | Deployment-ready multi-app config package generation (4-app layout) — index-time vs search-time split, brief Magic-8 self-check, no-hallucinated-attribute grounding | data-onboarding, conf, package, props, transforms | — | Data Source Onboarding (full) *(v1.5.0-dev)*; reusable by any playbook that generates onboarding config and delivers a deployable package |
-| **26** | `data-onboarding-readiness` *(v1.5.0-dev)* | Onboarding-correctness preflight — "correctness ≠ freshness": call `splunk_check_ingest_health` before time-based work, report the verdict (timestamp-parse failures / out-of-window / truncation / line-breaking), and compose with `feed-health-verdict` (flowing? vs parsed-right?) | data-onboarding, data-quality, diagnostic, cross-cutting | — | Data Source Onboarding (full) + Data onboarding helper *(v1.5.0-dev)*; reusable by any playbook that builds time-based artifacts on a sourcetype, or any data-onboarding / data-quality playbook |
-| **27** | `magic-8-compliance` *(v1.5.0-dev)* | Magic 8 onboarding checklist + validate-and-score before handover: ground attribute names in the `conf-spec` connector, validate every stanza with `splunk_validate_props_conf` / `_transforms_conf` against the real `.conf.spec`, map CIM via the `cim-data-models` connector, then `splunk_compute_data_quality_score` — iterate if < 90 | data-onboarding, conf, validation, data-quality | — | Data Source Onboarding (full) *(v1.5.0-dev)*; reusable by any playbook that generates or audits onboarding config (props/transforms) and wants it correct, not just plausible |
-| **28** | `cribl-field-discovery` *(v1.7.0)* | Discover Cribl metadata fields per index/sourcetype (don't assume names): head-sample the data feed + the Cribl monitoring index, find the `cribl_*`/`__` join key on BOTH sides (often there isn't one → fall back to whole-index pipeline-level signal, never fabricate per-feed attribution); if no `cribl_*` fields exist, the feed isn't Cribl-processed | cribl, discovery, fields, onboarding | — | Cribl Stream → Splunk data-quality check *(v1.7.0)*; reusable by any onboarding playbook scoping the Cribl monitoring index. (The 3-leg S×T×C verdict truth table lives in the updated `data-onboarding-readiness` skill.) |
-| **29** | `edge-processor-discovery` *(v1.8.2)* | Discover the Splunk Edge Processor signal (sibling of `cribl-field-discovery`): the EP metrics are first-class metrics (`sourcetype=edge-metrics`) read via `\| mstats` (drop/backpressure/error/throughput), **not** an event search; EP stamps **no** provenance field on data events, so there is usually **no join key** — the verdict falls back to whole-instance/whole-dataset signal unless the customer added a per-event SPL2 quality stamp in the EP pipeline (never fabricate per-feed attribution). On-prem routes telemetry via the `default_telemetry_indexer` destination; Cloud lands it in the tenant `_metrics` index | edge-processor, discovery, metrics, mstats, onboarding | — | Edge Processor → Splunk data-quality check *(v1.8.2)*; reusable by any onboarding playbook scoping the EP metrics index. (The S × T × (C \| E) verdict truth table lives in the updated `data-onboarding-readiness` skill.) |
+| 1 | `general-output-style` | General output style rules | guardrail, output-style, splunk-cloud-safe | — | no agent template declares it; the runtime auto-includes it in every agent that is not General or Default |
+| 2 | `spl-perf-priorities` | SPL performance priorities | spl, performance | — | **39** (27 ready, 12 in preview): Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Build / improve an alert • Build / improve a report • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • Data troubleshooting helper • Investigation • ATT&CK Tactic Hunt • Fraud Rule Builder • Behavioral Profile Builder • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint, Ask an external LLM (`ai` command) • ES: Triage a notable *(preview)*, Investigate a user *(preview)*, Investigate a host *(preview)*, Investigate an IOC *(preview)*, Phishing email triage *(preview)*, Lateral movement check *(preview)*, Detection coverage gap analysis *(preview)*, Tune a noisy correlation search *(preview)* • ITSI: Diagnose service degradation *(preview)*, Root-cause an episode, Service health timeline *(preview)*, KPI threshold review *(preview)* |
+| 3 | `spl-validation-loop` | SPL validation + self-correct loop | spl, validation, iterative | — | **39** (28 ready, 11 in preview): Build a SPL search • Improve an existing SPL • Build / improve an alert • Build / improve a field extraction • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • Data enrichment helper • Audit & refresh an existing ML use case • Data troubleshooting helper • Investigation • ATT&CK Tactic Hunt • Fraud Rule Builder • Fraud Ring Mapper • Behavioral Profile Builder • Fraud Command Center *(preview)* • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Stats vs ML decision helper, Bring your own ONNX model, Score against an AWS SageMaker endpoint • ES: Triage a notable *(preview)*, Investigate a user *(preview)*, Investigate a host *(preview)*, Investigate an IOC *(preview)*, Phishing email triage *(preview)*, Lateral movement check *(preview)*, Detection coverage gap analysis *(preview)* • ITSI: Diagnose service degradation *(preview)*, Root-cause an episode, Service health timeline *(preview)*, KPI threshold review *(preview)* |
+| 4 | `dashboard-xml-discipline` | Simple XML dashboard discipline | dashboard, simplexml | — | **22** (21 ready, 1 in preview): Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Investigation • ATT&CK Tactic Hunt • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint, Ask an external LLM (`ai` command) |
+| 5 | `dashboard-xml-validation-loop` | Simple XML dashboard validation + render-check loop | dashboard, simplexml, validation | — | **23** (22 ready, 1 in preview): Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Audit & refresh an existing ML use case • Investigation • ATT&CK Tactic Hunt • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint, Ask an external LLM (`ai` command) |
+| 6 | `dashboard-studio-versioning` preview (administrators only) | Dashboard Studio version-awareness | dashboard, studio, version-aware | — | **1** (in preview): Build a Dashboard Studio JSON dashboard *(preview)* |
+| 7 | `dashboard-proof-required` | What a proof dashboard must show: injected only when **Also build a proof dashboard** is on | dashboard, proof | — | **16** (15 ready, 1 in preview): Build / improve an alert • Investigation • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint |
+| 8 | `viz-best-fit` | Visualization best-fit selection | visualization, dashboard | — | **17** (16 ready, 1 in preview): Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Data visualization helper • Investigation • ATT&CK Tactic Hunt • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint |
+| 9 | `alert-companion-dashboard` | Companion dashboard for an alert: injected only when **Also build a proof dashboard** is on | alert, dashboard | — | **3**: Build / improve an alert • AI Toolkit: CDTSM Predictive Alerting, Outlier ALERT + diagnostic dashboard |
+| 10 | `ml-aiworkbench-naming-and-share` | MLTK aiworkbench naming + global share handler | mltk, ml, naming, audit | Splunk_ML_Toolkit ≥ 5.0.0 | **10**: Audit & refresh an existing ML use case • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint, Ask an external LLM (`ai` command) |
+| 11 | `ml-data-readiness-precheck` | MLTK data-readiness pre-check | mltk, ml, exploration | Splunk_ML_Toolkit ≥ 5.0.0 | **7**: AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Stats vs ML decision helper |
+| 12 | `ml-self-correct-budget` | MLTK self-correct loop (max 3 attempts per object) | mltk, ml, iterative, budget | Splunk_ML_Toolkit ≥ 5.0.0 | **9**: Audit & refresh an existing ML use case • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint |
+| 13 | `feed-health-verdict` | TrackMe feed-health pre-flight + explicit verdict | trackme, feed-health, diagnostic | trackme | **41** (19 ready, 22 in preview): Build / improve an alert • Data onboarding helper • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data troubleshooting helper • Investigation • ATT&CK Tactic Hunt • Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder • Fraud Command Center *(preview)* • AI Toolkit: CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting • ES: Triage a notable *(preview)*, Investigate a user *(preview)*, Investigate a host *(preview)*, Investigate an IOC *(preview)*, Phishing email triage *(preview)*, Lateral movement check *(preview)*, Detection coverage gap analysis *(preview)*, Daily SOC handoff summary *(preview)*, Tune a noisy correlation search *(preview)* • ITSI: Automatic Root Cause Analysis, Diagnose service degradation *(preview)*, Root-cause an episode, Service health timeline *(preview)*, KPI threshold review *(preview)*, Impact analysis *(preview)*, Episode triage queue summary *(preview)*, Entity health check *(preview)* • TrackMe: Morning data-health check *(preview)*, Empty-result investigator *(preview)*, ITSI KPI root-cause assistant *(preview)*, ES detection data-readiness check *(preview)*, Event-count anomaly deep dive *(preview)*, Onboard a new data source *(preview)* |
+| 14 | `metric-vs-event-index-aware` | Metric vs event index awareness (`mstats` / `mcatalog`) | spl, metric, metric-vs-event | — | **10** (9 ready, 1 in preview): Build a SPL search • Improve an existing SPL • Explain a SPL search • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • Data troubleshooting helper • Investigation • ATT&CK Tactic Hunt • TrackMe: Empty-result investigator *(preview)* |
+| 15 | `read-only-by-default-soc` | Read-only by default for SOC / SecOps work | soc, es, read-only, gated | SplunkEnterpriseSecuritySuite | **11** (1 ready, 10 in preview): ATT&CK Tactic Hunt • ES: Triage a notable *(preview)*, Investigate a user *(preview)*, Investigate a host *(preview)*, Investigate an IOC *(preview)*, Phishing email triage *(preview)*, Lateral movement check *(preview)*, Detection coverage gap analysis *(preview)*, Daily SOC handoff summary *(preview)*, Tune a noisy correlation search *(preview)* • TrackMe: ES detection data-readiness check *(preview)* |
+| 16 | `read-only-by-default-itops` | Read-only by default for ITSI work | itsi, itops, read-only, gated | SA-ITOA | **9** (2 ready, 7 in preview): ITSI: Automatic Root Cause Analysis, Diagnose service degradation *(preview)*, Root-cause an episode, Service health timeline *(preview)*, KPI threshold review *(preview)*, Impact analysis *(preview)*, Episode triage queue summary *(preview)*, Entity health check *(preview)* • TrackMe: ITSI KPI root-cause assistant *(preview)* |
+| 17 | `data-vs-service-distinction` | "Data broken vs service broken": two-verdict rule | itsi, trackme, verdict, diagnostic | trackme | **11** (3 ready, 8 in preview): Investigation • ITSI: Automatic Root Cause Analysis, Diagnose service degradation *(preview)*, Root-cause an episode, Service health timeline *(preview)*, KPI threshold review *(preview)*, Impact analysis *(preview)*, Episode triage queue summary *(preview)* • TrackMe: Empty-result investigator *(preview)*, ITSI KPI root-cause assistant *(preview)*, Event-count anomaly deep dive *(preview)* |
+| 18 | `naming-collision-handling` | Knowledge object name-collision handling | naming, gated | — | **23** (22 ready, 1 in preview): Build a SPL search • Improve an existing SPL • Explain a SPL search • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Build / improve an alert • Data Source Onboarding (full) • Audit & refresh an existing ML use case • Create your own agent • ATT&CK Tactic Hunt • AI Toolkit: Smart outlier detection (single metric), Multi-field anomaly detection, Smart forecasting, CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting, Smart clustering, Smart prediction (categorical or numeric), Outlier ALERT + diagnostic dashboard, Bring your own ONNX model, Score against an AWS SageMaker endpoint, Ask an external LLM (`ai` command) |
+| **19** | `template-authoring-discipline` | Authoring discipline for user agents (composition + skill inclusion + scope/ownership rules + refusal patterns for cross-cutting authoring concerns) | authoring, discipline, read-only | — | **2**: Create your own agent • Update your own agent |
+| **20** | `prompt-injection-defense-on-authored-content` | Refusal patterns for prompt-injection content inside untrusted user authoring descriptions (scope-escalation, owner-spoof, skill-back-door, guardrail-bypass, role-elevation, system-impersonation) | safety, authoring, prompt-injection-defense | — | **2**: Create your own agent • Update your own agent |
+| **21** | `consult-security-knowledge-first` | Consult the knowledge layer for security-flavoured tasks | knowledge, routing, soc, security, bootstrap | — | **20** (10 ready, 10 in preview): Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • ATT&CK Tactic Hunt • Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder • ES: Triage a notable *(preview)*, Investigate a user *(preview)*, Investigate a host *(preview)*, Investigate an IOC *(preview)*, Phishing email triage *(preview)*, Lateral movement check *(preview)*, Detection coverage gap analysis *(preview)*, Daily SOC handoff summary *(preview)*, Tune a noisy correlation search *(preview)* • TrackMe: ES detection data-readiness check *(preview)* |
+| **22** | `cdtsm-discipline` | Cisco Deep Time Series Model (CDTSM) discipline | ml, mltk, cdtsm, pretrained, discipline | Splunk_ML_Toolkit ≥ 5.0.0 | **3**: AI Toolkit: CDTSM Smart Forecasting, CDTSM Anomaly Detection, CDTSM Predictive Alerting |
+| **23** | `hunt-evidence-honesty` | Hunt evidence honesty: zero-evidence and detection-tile colour rules | soc, mitre, threat-hunting, dashboard, output-style, honesty | — | **8** (7 ready, 1 in preview): ATT&CK Tactic Hunt • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder • Fraud Command Center *(preview)* |
+| **24** | `demo-dataset-time-reanchor` | Demo dataset time re-anchoring: map relative windows onto a fixed dataset's active period | spl, time, dashboard, demo, data-awareness | — | **1**: ATT&CK Tactic Hunt |
+| **25** | `conf-package-discipline` | Deployment-ready multi-app config package generation (4-app layout): index-time vs search-time split, brief Magic-8 self-check, no-hallucinated-attribute grounding | data-onboarding, conf, package, props, transforms | — | **1**: Data Source Onboarding (full) |
+| **26** | `data-onboarding-readiness` *(v1.5.0)* | Onboarding-correctness preflight: "correctness ≠ freshness": call `splunk_check_ingest_health` before time-based work, report the verdict (timestamp-parse failures / out-of-window / truncation / line-breaking), and compose with `feed-health-verdict` (flowing? vs parsed-right?) | data-onboarding, data-quality, diagnostic, cross-cutting | — | **8**: Data onboarding helper • CIM Coverage Audit • Data Source Onboarding (full) • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Investigation • Fraud Data Coverage Audit • Fraud Alert Triage |
+| **27** | `magic-8-compliance` *(v1.5.0)* | Magic 8 onboarding checklist + validate-and-score before handover: ground attribute names in the `conf-spec` connector, validate every stanza with `splunk_validate_props_conf` / `_transforms_conf` against the real `.conf.spec`, map CIM via the `cim-data-models` connector, then `splunk_compute_data_quality_score`: iterate if < 90 | data-onboarding, conf, validation, data-quality | — | **2**: CIM Coverage Audit • Data Source Onboarding (full) |
+| **28** | `cribl-field-discovery` *(v1.7.0)* | Discover Cribl metadata fields per index/sourcetype (don't assume names): head-sample the data feed + the Cribl monitoring index, find the `cribl_*`/`__` join key on BOTH sides (often there isn't one → fall back to whole-index pipeline-level signal, never fabricate per-feed attribution); if no `cribl_*` fields exist, the feed isn't Cribl-processed | cribl, discovery, fields, onboarding | — | **1**: Cribl Stream → Splunk data-quality check |
+| **29** | `edge-processor-discovery` *(v1.8.2)* | Discover the Splunk Edge Processor signal (sibling of `cribl-field-discovery`): the EP metrics are first-class metrics (`sourcetype=edge-metrics`) read via `\| mstats` (drop/backpressure/error/throughput), **not** an event search; EP stamps **no** provenance field on data events, so there is usually **no join key**: the verdict falls back to whole-instance/whole-dataset signal unless the customer added a per-event SPL2 quality stamp in the EP pipeline (never fabricate per-feed attribution). On-prem routes telemetry via the `default_telemetry_indexer` destination; Cloud lands it in the tenant `_metrics` index | edge-processor, discovery, fields, onboarding | — | **1**: Edge Processor → Splunk data-quality check |
+| 30 | `spl-review-conduct` | How an SPL reviewer must behave | spl, review, guardrail | — | **1**: Improve an existing SPL |
+| 31 | `spl-review-correctness` | Silent failure modes, anti-patterns and severity | spl, review, correctness | — | **1**: Improve an existing SPL |
+| 32 | `spl-review-rewrites` | What to write instead | spl, review, performance | — | **1**: Improve an existing SPL |
+| 33 | `spl-review-evidence` | Proving a rewrite is equivalent | spl, review, validation | — | **1**: Improve an existing SPL |
+| 34 | `dashboard-ingestion-health` | Mandatory data-ingestion health panel on every dashboard | dashboard, data-quality, ingestion, simplexml | — | **3**: Build a Simple XML dashboard • Improve a Simple XML dashboard • Investigation |
+| 35 | `cim-coverage-audit` | Interpreting the CIM Coverage Audit honestly | data-onboarding, cim, data-quality, enterprise-security | — | **1**: CIM Coverage Audit |
+| 36 | `servicenow-structured-discipline` | ServiceNow structured-data discipline | servicenow, structured-discipline, guardrail | — | **14**: ServiceNow CMDB Lookup & Enrichment • ServiceNow Incident / Event Raise • ServiceNow Incident from Splunk Alert • ServiceNow Incident from ITSI Episode • ServiceNow Incident from ES Notable • ServiceNow Closed-Incident: Create New • ServiceNow Closed-Incident: Reopen • ServiceNow Closed-Incident: Suppress • Security Incident from ES Notable • Security Incident from Splunk Alert • Security Incident from ITSI Episode • Security Closed-Incident: Create New • Security Closed-Incident: Reopen • Security Closed-Incident: Suppress |
+| 37 | `servicenow-incident-description-authoring` | ServiceNow incident-description authoring | servicenow, incident, structured-discipline | — | **13**: ServiceNow Incident / Event Raise • ServiceNow Incident from Splunk Alert • ServiceNow Incident from ITSI Episode • ServiceNow Incident from ES Notable • ServiceNow Closed-Incident: Create New • ServiceNow Closed-Incident: Reopen • ServiceNow Closed-Incident: Suppress • Security Incident from ES Notable • Security Incident from Splunk Alert • Security Incident from ITSI Episode • Security Closed-Incident: Create New • Security Closed-Incident: Reopen • Security Closed-Incident: Suppress |
+| 38 | `servicenow-tisc-enrichment` | ServiceNow TISC threat-intel enrichment (detect-and-prefer) | servicenow, tisc, threat-intel, enrichment | — | no agent template declares it |
+| 39 | `kpi-data-lineage` | KPI data lineage: resolve the feed behind every KPI before trusting it | itsi, rca, lineage, data-platform, diagnostic | SA-ITOA | **1** (ready): ITSI: Automatic Root Cause Analysis |
+| 40 | `monitoring-self-health` | Monitoring self-health: is the KPI even being computed? | itsi, rca, monitoring, diagnostic | SA-ITOA | **1** (ready): ITSI: Automatic Root Cause Analysis |
+| 41 | `rca-probable-cause-language` | RCA language discipline: probable cause, evidence strength, honest uncertainty | itsi, rca, language, guardrail | SA-ITOA | **1** (ready): ITSI: Automatic Root Cause Analysis |
+| 42 | `fraud-entity-resolution` | Resolving fraud entities before anything else | fraud, entity-resolution, canonicalisation, evidence | — | **7** (6 ready, 1 in preview): Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Fraud Command Center *(preview)* |
+| 43 | `dashboard-ir-authoring` | Dashboards as an IR, not as markup | dashboard, compiler, guardrail | — | **2**: Improve an existing SPL • Fraud Rule Builder |
+| 44 | `fraud-dashboard-structure` | Fraud dashboards: fixed structure, honest panels | fraud, dashboard, guardrail | — | **4** (3 ready, 1 in preview): Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Command Center *(preview)* |
+| 45 | `fraud-risk-scoring-discipline` | Fraud risk scoring: weighted, decomposable, RBA-aligned | fraud, risk-scoring, rba, guardrail | — | **4** (3 ready, 1 in preview): Fraud Rule Builder • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Fraud Command Center *(preview)* |
+| 46 | `detection-scope-fidelity` | Detection scope fidelity: match what they asked for, and prove the row | fraud, detection-engineering, evidence, guardrail | — | **1**: Fraud Rule Builder |
+| 47 | `spl-stage-sampling` | Explaining SPL from observed behaviour, not from the text | spl, explanation, evidence, guardrail | — | **1**: Explain a SPL search |
+| 48 | `spl-behaviour-vs-data` | When a search stopped working, decide whether it is the search or the data | spl, explanation, data-quality, evidence, guardrail | — | **1**: Explain a SPL search |
+| 49 | `explain-dashboard-layout` | The explanation dashboard: fixed sections, and whose search is whose | spl, explanation, dashboards, layout, guardrail | — | **1**: Explain a SPL search |
+| 50 | `explain-dashboard-style` | The explanation dashboard: house style, one look every run | spl, explanation, dashboards, styling | — | **1**: Explain a SPL search |
+| 51 | `spl-cim-model-gaps` | A CIM search can be perfect and still return nothing | spl, cim, data-quality, explanation, licensing | — | **1**: Explain a SPL search |
+| 52 | `spl-inline-comment-rules` | Commenting a search so it still runs | spl, explanation, authoring | — | **1**: Explain a SPL search |
+| 53 | `spl-intent-coverage` | Design the SPL from the request, and cover every part of it | spl, authoring, guardrail | — | **1**: Build a SPL search |
 
-**Inclusion details per playbook** are listed in [§5.3](#53-playbook--skills-included)
-(forward index) and [§5.4](#54-skill--playbooks-that-include-it)
+**Inclusion details per agent template** are listed in [§5.3](#53-agent-template--skills-included)
+(forward index) and [§5.4](#54-skill--agent-templates-that-include-it)
 (reverse index — useful for impact analysis: "if I edit skill X, which
-playbooks change?").
+agent templates change?").
 
 #### 3.5.4 Skill body authoring rules
 
 Enforced by code review (not runtime):
 
 - **Plain ASCII, markdown structure, no emojis.** Same rule as
-  `general-output-style` enforces for playbooks. Skills get this
+  `general-output-style` enforces for agents. Skills get this
   treatment too because they end up in the prompt verbatim.
 - **≤ 4000 chars per skill body.** Hard limit; runtime rejects
   longer skills (the `createSkill` / `updateSkill` helpers in
@@ -1133,22 +1166,12 @@ Enforced by code review (not runtime):
 - **Reference tools by backticked name** (e.g. `` `splunk_run_search` ``)
   but never invoke them. Skills are prose, not code.
 
-#### 3.5.5 Migration note for 0.9.6
+#### 3.5.5 Duplicated prose
 
-The 0.9.6 release ships the infrastructure (skills layer, 18 seeded
-skills, `includes_skills` on all 47 in-scope default playbooks, Skills
-admin UI tab) BUT **does NOT yet delete the duplicated prose** from
-individual playbooks' `prompt_text`. Until that follow-up lands (the
-spec calls it Phase 5 prose deletion), the assembled prompt for many
-playbooks will have some content duplicated between the playbook body
-and one or more skills. This is functionally safe — the LLM sees the
-same rule twice rather than missing it — but it makes prompts longer
-than they need to be.
-
-The prose-deletion pass requires a snapshot-diff test harness so
-that "delete this rule from playbook Y because skill X already covers
-it" can be done with confidence. That harness is the gating dependency
-on Phase 5; expect it in 0.9.7.
+Some agent template bodies still repeat a rule that one of their included
+skills also carries, so the assembled prompt can contain the same content
+twice. This is functionally safe, because the LLM sees the rule twice rather
+than missing it, but it makes those prompts longer than they need to be.
 
 ---
 
@@ -1172,16 +1195,16 @@ Full matrix: the licensing reference.
 
 ### 4.1 How tools are advertised to the LLM
 
-The dispatcher does **not** flood the LLM with all ~107 tool
-signatures on every turn — that re-sends ~37 K input tokens of tool
-definitions *per tool-loop turn*. Instead:
+The dispatcher does **not** flood the LLM with all 196 tool
+signatures on every turn — that re-sends tens of thousands of input
+tokens of tool definitions *per tool-loop turn*. Instead:
 
-1. The **active playbook** can declare `allowed_tools`,
+1. The **active agent** can declare `allowed_tools`,
    `denied_tools`, `tool_tag_filters`, `tool_category_filters` —
    those scope the offer.
-2. Without playbook scoping, the dispatcher exposes a small
+2. Without agent scoping, the dispatcher exposes a small
    **essentials set** (~21 tools: core SPL/search, saved-search,
-   dashboard, alert, ML-probe, plus the universal version / playbook /
+   dashboard, alert, ML-probe, plus the universal version / agent /
    knowledge / router tools). The LLM uses `splunk_route_tools` to
    **discover *and* unlock** the rest: the router now *adds* the tools
    it returns to the live advertised set for the remainder of the
@@ -1193,7 +1216,7 @@ definitions *per tool-loop turn*. Instead:
    system prompt with `cache_control` breakpoints, so every turn after
    the first re-reads that static prefix from cache at ~10% of the input
    price instead of full price. Together with the essentials default
-   this cuts a multi-turn Ask's input cost by a large factor — a 13-turn
+   this cuts a multi-turn run's input cost by a large factor — a 13-turn
    run that previously billed ~669 K input tokens now costs a fraction.
 
 Per-tool tag / category / short-description overrides applied via the
@@ -1222,12 +1245,12 @@ listings below show **shipped defaults** only.
 
 | Tool | Tags | Description |
 |---|---|---|
-| `splunk_list_use_case_templates` | `read`, `discovery`, `bootstrap` | Lists use-case playbooks the user is allowed to see (org / BU + role + dependent-app filtered) with name and short_description. No parameters. |
-| `splunk_get_use_case_template_prompt` | `read` | Fetch a playbook's full `prompt_text` + `question_text` by name. |
+| `splunk_list_use_case_templates` | `read`, `discovery`, `bootstrap` | Lists agents the user is allowed to see (org / BU + role + dependent-app filtered) with name and short_description. No parameters. |
+| `splunk_get_use_case_template_prompt` | `read` | Fetch an agent's full `prompt_text` + `question_text` by name. |
 
 **`splunk_get_use_case_template_prompt`**
 
-- `name` (string, required) — playbook name.
+- `name` (string, required): agent name.
 
 ---
 
@@ -1265,11 +1288,50 @@ listings below show **shipped defaults** only.
 | Tool | Tags | Description |
 |---|---|---|
 | `splunk_run_search` | `read`, `spl`, `validation` | Run SPL synchronously, first 50 rows, for validation. |
+| `splunk_term_check` | `read`, `spl`, `discovery` | Where one token occurs: exact count, first/last seen per sourcetype. |
+| `splunk_validate_full_range` | `read`, `spl`, `validation`, `gated` | Full-range validation of a saved object, as saved; user confirms. |
+| `splunk_metadata` | `read`, `discovery` | What an index holds: sourcetypes/hosts/sources, first/last seen. |
+| `splunk_walklex` | `read`, `discovery` | Lexicon terms of an index (TERM()/PREFIX() evidence). |
+| `splunk_typeahead` | `read`, `discovery` | Lexicon completions of a prefix. |
 
 **`splunk_run_search`**
 
 - `spl` (string, required) — SPL to execute.
 - `earliest` (string, optional, default: `-15m`).
+- `latest` (string, optional, default: `now`).
+- `purpose` (string, optional, default: `answer`) — `answer` or `explore`. An `explore` search is a cheap check: the last hour first, sampled. A large `answer` event search runs sampled first and says so.
+- `exact` (boolean, optional, default: `false`) — only when the user asks for the exact run of an estimate: runs unsampled.
+
+**`splunk_validate_full_range`**
+
+- `kind` (string, required) — `saved_search`, `alert` or `dashboard`.
+- `name` (string, required).
+- `owner`, `app` (strings, optional) — from the save's `full_validation.object`.
+
+Gated: the user confirms first. A dashboard runs every search exactly as saved, each over its own range.
+
+**`splunk_metadata`**
+
+- `type` (string, required) — `sourcetypes`, `hosts` or `sources`.
+- `index` (string, required) — one exact index name.
+- `earliest`, `latest` (strings, optional, default `-24h` / `now`).
+
+**`splunk_walklex`**
+
+- `index` (string, required).
+- `type` (string, optional, default `term`) — `term` or `field`.
+- `prefix` (string, optional) — lower-case prefix, e.g. `error` or `log_level=`.
+- `earliest`, `latest` (strings, optional, default `-7d` / `now`). Reads rolled buckets only.
+
+**`splunk_typeahead`**
+
+- `prefix` (string, required), `index` (string, required), `count` (integer, optional, default 20).
+
+**`splunk_term_check`**
+
+- `token` (string, required) — one word without spaces or punctuation.
+- `indexes` (array of strings, required) — exact index names.
+- `earliest` (string, optional, default: `-24h`).
 - `latest` (string, optional, default: `now`).
 
 ---
@@ -1297,7 +1359,7 @@ listings below show **shipped defaults** only.
 | `splunk_get_saved_search` | `read` | Returns the SPL of one named saved search in the current app namespace. |
 | `splunk_create_saved_search` | `write`, `validation` | Creates a NEW saved search (optionally in `target_app` with sharing) and auto-validates by running the SPL. |
 | `splunk_update_saved_search` | `write`, `validation`, `gated` | Replaces SPL of an existing saved search after explicit user confirmation; auto-validates. |
-| `splunk_run_saved_search_by_name` | `read`, `spl`, `audit` | Dispatches `\| savedsearch <name>` via oneshot and returns first 50 rows + warnings to audit existing saved searches. |
+| `splunk_run_saved_search_by_name` | `read`, `spl`, `audit` | Runs `\| savedsearch <name>` as a search job and returns first 50 rows + warnings to audit existing saved searches. |
 
 **`splunk_list_saved_searches`**
 
@@ -1336,10 +1398,10 @@ listings below show **shipped defaults** only.
 | `splunk_xml_update_panel` | `write`, `dashboard`, `simplexml`, `builder` | Edits a panel in place (self-correct after validation). |
 | `splunk_xml_remove_panel` | `write`, `dashboard`, `simplexml`, `builder` | Removes a panel from the builder session by `panel_id`. |
 | `splunk_xml_preview` | `read`, `dashboard`, `simplexml`, `builder` | Returns the assembled XML for inspection (not echoed); read-only. |
-| `splunk_xml_publish` | `write`, `dashboard`, `simplexml`, `builder`, `validation` | Assembles + orphan-`$token$`-checks + dangling-`base=`-checks + persists via the create/update dispatch (inherits every guardrail, plus the §7 self-containment gate); returns `validation`. |
-| `splunk_xml_add_base_search` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0 §1** — registers a top-level base search; panels post-process it via `base=` (one search runs once → fewer concurrent searches; time tokens live on the base). |
-| `splunk_xml_set_color_tokens` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0 §2** — emits the uniform severity→colour token search (`$colors$` / `$colorlist$` / `$colors_areachart$` from `SEVERITY_COLOR_MAP`); auto-enabled whenever a panel sets `color_by`. |
-| `splunk_xml_add_tab_group` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0 §6** — optional tab strip (pure Simple XML `<input type="link">` + token evals, ZERO JS); panels join a tab via `tab=`. Adding a group makes the root a `<form>`. |
+| `splunk_xml_publish` | `write`, `dashboard`, `simplexml`, `builder`, `validation` | Assembles + orphan-`$token$`-checks + dangling-`base=`-checks + persists via the create/update dispatch (inherits every guardrail, plus the self-containment gate); returns `validation`. |
+| `splunk_xml_add_base_search` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0**: registers a top-level base search; panels post-process it via `base=` (one search runs once → fewer concurrent searches; time tokens live on the base). The base must be transforming (`… \| stats count by _time, <fields>`): a raw event-fetch is refused, because a post-process reads only the first 500,000 events of a non-transforming base. |
+| `splunk_xml_set_color_tokens` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0**: emits the uniform severity→colour token search (`$colors$` / `$colorlist$` / `$colors_areachart$` from `SEVERITY_COLOR_MAP`); auto-enabled whenever a panel sets `color_by`. |
+| `splunk_xml_add_tab_group` | `write`, `dashboard`, `simplexml`, `builder` | **v1.7.0**: optional tab strip (pure Simple XML `<input type="link">` + token evals, ZERO JS); panels join a tab via `tab=`. Adding a group makes the root a `<form>`. |
 
 **Parameters**
 
@@ -1347,12 +1409,12 @@ listings below show **shipped defaults** only.
 - `splunk_create_dashboard_xml`: `name` (string, required — no spaces), `xml` (string, required — full `<dashboard>` / `<form>`).
 - `splunk_update_dashboard_xml`: `name` (string, required), `xml` (string, required).
 - `splunk_get_dashboard_panel_data`: `name` (string, required), `earliest` (string, optional), `latest` (string, optional).
-- `splunk_xml_create`: `title` (string, required), `description`, `theme` (`light`|`dark`), `hide_edit` (bool), `submit_button` (bool), `panels_per_row` (number, default 2), `align_inputs` (bool, **§3** — default true when ≥2 inputs; cosmetic CSS, Splunk Cloud strips it).
-- `splunk_xml_add_input`: `dashboard_id` + `type` + `token` + `label` (required); `default`, `earliest`/`latest` (time — ISO 8601 / relative), `dataset_kind` (`live`|`botsv`|`fixed_window`, **§4** time-default hint), `choices[]`, `search` + `field_for_label`/`field_for_value`, `prefix`/`suffix`/`value_prefix`/`value_suffix`/`delimiter` (multiselect), `search_when_changed`.
-- `splunk_xml_add_base_search` (**§1**): `dashboard_id` + `base_id` + `spl` (required); `earliest`/`latest` (optional fixed-window; omit to inherit the dashboard time picker).
-- `splunk_xml_set_color_tokens` (**§2**): `dashboard_id` (required).
-- `splunk_xml_add_tab_group` (**§6**): `dashboard_id` + `group` + `tabs[]` (each `{id,label,default?}`) (required); `parent` (`"parentGroup:parentTab"` for a nested sub-tab group).
-- `splunk_xml_add_panel`: `dashboard_id` + `viz` (required; `single`|`chart-*`|`table`|`event`|`html`|`map`); `title`, `spl` (RAW — required except `html`; the post-process when `base` is set), `base` (**§1** post-process a base search), `color_by` (**§2** field name / `"severity"`), `options{}`, `drilldown{}`, `format[]`, `html`, `time{}`, `row` (number), `full_width` (bool), `depends` (**§5** gate the row on token(s)), `tab` (**§6** `"group:tab"` or array), `raw_xml`.
+- `splunk_xml_create`: `title` (string, required), `description`, `theme` (`light`|`dark`), `hide_edit` (bool), `submit_button` (bool), `panels_per_row` (number, default 2), `align_inputs` (bool, default true when ≥2 inputs; cosmetic CSS, Splunk Cloud strips it).
+- `splunk_xml_add_input`: `dashboard_id` + `type` + `token` + `label` (required); `default`, `earliest`/`latest` (time: ISO 8601 / relative), `dataset_kind` (`live`|`botsv`|`fixed_window`, time-default hint), `choices[]`, `search` + `field_for_label`/`field_for_value`, `prefix`/`suffix`/`value_prefix`/`value_suffix`/`delimiter` (multiselect), `search_when_changed`.
+- `splunk_xml_add_base_search`: `dashboard_id` + `base_id` + `spl` (required); `earliest`/`latest` (optional fixed-window; omit to inherit the dashboard time picker).
+- `splunk_xml_set_color_tokens`: `dashboard_id` (required).
+- `splunk_xml_add_tab_group`: `dashboard_id` + `group` + `tabs[]` (each `{id,label,default?}`) (required); `parent` (`"parentGroup:parentTab"` for a nested sub-tab group).
+- `splunk_xml_add_panel`: `dashboard_id` + `viz` (required; `single`|`chart-*`|`table`|`event`|`html`|`map`); `title`, `spl` (RAW; required except `html`; the post-process when `base` is set), `base` (post-process a base search), `color_by` (field name / `"severity"`), `options{}`, `drilldown{}`, `format[]`, `html`, `time{}`, `row` (number), `full_width` (bool), `depends` (gate the row on token(s)), `tab` (`"group:tab"` or array), `raw_xml`.
 - `splunk_xml_update_panel`: `dashboard_id` + `panel_id` (required); same fields as add_panel (incl. `base`/`color_by`/`depends`/`tab`).
 - `splunk_xml_remove_panel`: `dashboard_id` + `panel_id` (required).
 - `splunk_xml_preview`: `dashboard_id` (required).
@@ -1364,7 +1426,7 @@ listings below show **shipped defaults** only.
 
 > Full pipeline + failure modes in
 > the Dashboard Studio guide. The Studio
-> use-case playbook ships as `draft` in 0.9.5 (see §10 of that doc
+> agent template ships as `draft` (in preview) in 0.9.5 (see §10 of that doc
 > for promotion criteria).
 
 #### 3.9.1 Runtime + reference
@@ -1479,6 +1541,7 @@ dashboard through the builder session API:
 | Tool | Tags | Description |
 |---|---|---|
 | `splunk_check_ml_capabilities` | `read`, `ml`, `discovery` | Probes whether the user can run AI Toolkit SPL commands `fit`, `apply`, `ai` and returns the Splunk_ML_Toolkit version. No parameters. |
+| `splunk_proof_snapshot` | `write`, `ml`, `dashboard`, `lookup` | Proof dashboard only: snapshots an unsampled AI Toolkit scoring answer into a private lookup that the score panels read with inputlookup. |
 | `splunk_list_ml_models` | `read`, `ml`, `model`, `discovery` | Lists AI Toolkit models via `/services/mltk/models` (fallback `\| listmodels`) with name, algorithm, owner, app. No parameters. |
 | `splunk_share_mltk_model_globally` | `write`, `ml`, `model`, **`min_capability: ml_generation`** | Promotes a `mltk_<algo>_<thing>_aiworkbench_v<N>` MLTK model lookup-table-file to `owner=nobody` / global sharing across visible apps. **Requires `ml_generation` (Professional).** |
 | `splunk_ai_command` | `read`, `ml`, `spl` | Runs the AI Toolkit `\| ai` SPL command on a pre-filtered ≤100 row set against the configured external LLM Connection. |
@@ -1740,7 +1803,7 @@ dashboard through the builder session API:
 
 Router-then-federation retrieval of reference content (detections,
 analytic stories, trigger rules, tuning notes, lessons learned) from
-registered knowledge connectors. Read-only and tenant-scoped.
+registered knowledge connectors. Read-only and scoped per Org and BU.
 
 Six connectors ship out-of-the-box (`static-library`, `local-curated`,
 v1.4.0's `conf-searchbnf` + `conf-visualizations`, and v1.5.0's `conf-spec` +
@@ -1752,8 +1815,8 @@ live-platform-config connectors** that read the running instance's own config
 (zero internet): `conf-searchbnf` grounds SPL in the box's real search-command
 grammar (`command-note` kind), and `conf-visualizations` grounds custom-viz
 dashboards in the installed viz + their demo dashboards + a curated
-parameter-meaning overlay (`visualization-spec` kind). **v1.5.0-dev (Data
-Foundation, Phase 2) added two more self-hosted-only platform connectors** that
+parameter-meaning overlay (`visualization-spec` kind). **v1.5.0 added two
+more self-hosted-only platform connectors** that
 ground onboarding config in the install's own authoritative files:
 `conf-spec` reads the `*.conf.spec` files under `$SPLUNK_HOME/etc/system/README/`
 (`conf-spec-note` kind — exact, version-matched conf attribute names/syntax/
@@ -1766,13 +1829,15 @@ GLOBAL platform knowledge (every Org/BU; per-user visibility enforced live by
 ACL) — see the knowledge-layer guide, §1. End users do not
 see connector configuration — they
 benefit through the LLM's citations + the per-turn "Knowledge
-sources" chip row in the History panel. Full design in
-the design specification;
-contract spec in the design specification;
-admin guide in the knowledge-layer guide.
+sources" chip row in the History panel. The admin guide is
+the knowledge-layer guide.
+
+The category also carries **`splunk_memory`**, which is not retrieval: it
+is Adjutant's own persistent memory, scoped per Org and BU, described below.
 
 | Tool | Tags | Description |
 |---|---|---|
+| `splunk_memory` | `read`, `write`, `memory`, `tenant-scoped`, `learned-fact`, `watermark` | Persistent memory, scoped per Org and BU. Two record types; see the note below. Scope is resolved **server-side** from the caller; a scope passed in arguments is ignored, so one Org or BU cannot address another's memory. `operation`: `get` / `put` / `list`. |
 | `splunk_route_knowledge` | `read`, `iterative`, `splunk-cloud-safe`, `cheap`, `bootstrap` | Cheap pre-flight: scores every visible connector against the query + intent and returns a shortlist with `why` strings. Deterministic — no LLM call at routing time. |
 | `splunk_search_knowledge` | `read`, `iterative`, `splunk-cloud-safe`, `federated` | Fans out search across shortlisted connectors (or fast-only when no shortlist given). Returns ranked `candidates` + `warnings` for timeouts/errors. |
 | `splunk_get_knowledge_entry` | `read`, `splunk-cloud-safe` | Fetches one full envelope by `(connector, opaque_ref)`. Passive prompt-injection scanner adds `_injection_flags` to suspicious prose fields. |
@@ -1784,6 +1849,14 @@ admin guide in the knowledge-layer guide.
 - `splunk_search_knowledge`: `query` (string, required), `filters` (object, optional with `mitre_techniques` / `kill_chain_phases` / `data_sources` / `data_models` / `kinds` arrays), `connectors` (array<string>, optional — shortlist from router), `limit` (integer, optional, default: `10`, max: `25`).
 - `splunk_get_knowledge_entry`: `connector` (string, required), `opaque_ref` (string, required).
 - `splunk_report_knowledge_use`: `connector` (string, required), `source_id` (string, required), `used` (boolean, required).
+- `splunk_memory`: `operation` (string, required — `get` / `put` / `list`), `record_type` (string, required — `learned_fact` / `integration_state`), then per type: `fact_key`, `fact_value`, `source`, `source_ref` for a `learned_fact`; `integration_id`, `resource_id` and the watermark fields for `integration_state`.
+
+**The two memory record types**
+
+| Record type | What it holds | The rule that matters |
+|---|---|---|
+| `learned_fact` | A durable fact about this environment — the index a report should use, what "the Cribl search" resolves to for this team, a nickname for a saved query. | Stored **unconfirmed** until a human confirms it in the **Learned Knowledge** tab, but usable immediately. A `get` falls back from BU to Org, so a fact learned once for the Org serves every BU under it. |
+| `integration_state` | An integration's resume watermark — the last timestamp, id or cursor, per resource. | Advance a watermark **only after** the data it covers is durably written. A watermark moved on a successful read rather than a confirmed write is a resume point past data that was never stored, and nothing downstream can tell. |
 
 ---
 
@@ -1802,8 +1875,7 @@ current user, so the content is only reachable when **SSE is installed and
 visible to that user**; each tool prereq-checks and returns a structured
 `prerequisite_missing` result (never an exception) when SSE is absent. The
 ESCU app (`DA-ESS-ContentUpdate`) is only required to *run* ESCU-channel
-detections — their SPL can always be *read*. Full spec in
-the design specification.
+detections; their SPL can always be *read*.
 
 | Tool | Tags | Description |
 |---|---|---|
@@ -1823,7 +1895,7 @@ the design specification.
 
 ---
 
-### 4.18 Category: `data-onboarding` *(new in 1.5.0-dev)*
+### 4.18 Category: `data-onboarding` *(new in 1.5.0)*
 
 > **Per-feature licensing (v1.4.1).** `splunk_generate_conf_package` carries
 > `min_capability = data_onboarding` → **requires `data_onboarding`
@@ -1841,9 +1913,9 @@ the design specification.
 > events). The `in_splunk_awareness` capability is **deprecated / vestigial** and
 > gates nothing. See §4.0 + the licensing reference §2.2 (row 9).
 >
-> *(v1.5.0-dev Phase 3)* The three new validation/scoring tools below —
-> `splunk_validate_props_conf`, `splunk_validate_transforms_conf`,
-> `splunk_compute_data_quality_score` — are **read-only** but carry
+> *(v1.5.0)* The three validation/scoring tools below
+> (`splunk_validate_props_conf`, `splunk_validate_transforms_conf`,
+> `splunk_compute_data_quality_score`) are **read-only** but carry
 > `min_capability = data_onboarding` (Professional+), so they ride the same
 > tier as the package builder. The validators call the `itmip_llm/validate_conf`
 > handler, which also refuses below Professional with a graceful **403**.
@@ -1873,13 +1945,12 @@ KVStore collection **`itmip_ai_artifact_packages`** (admin-only ACL,
 SPA (no new external egress; the only network is browser↔splunkd — same pattern
 as the Audit CSV export). Backed by the new REST handler
 `bin/itmip_llm_conf_package.py` (route `itmip_llm/conf_package`, GET + POST).
-*(Pre-deployment validation + a Data Quality Score are planned for a later
-1.5.0 phase; until then the builder grounds its configs on the LLM plus the
-live-platform knowledge connectors, and the `conf-package-discipline` skill
-carries a Magic-8 self-check.)*
+The Data Source Onboarding (full) agent template validates and scores the
+drafted config with the tools described below before it generates the package,
+and the `conf-package-discipline` skill carries a Magic-8 self-check.
 
 The category also holds the **onboarding-correctness check**
-`splunk_check_ingest_health` *(new in 1.5.0-dev)* — the cross-cutting
+`splunk_check_ingest_health` *(new in 1.5.0)*, the cross-cutting
 read-only preflight that reads `index=_internal` **as the system user** to
 surface per-sourcetype ingestion/parsing errors (timestamp-parse failures,
 out-of-window timestamps, truncation, line-breaking warnings) that TrackMe
@@ -1892,8 +1963,8 @@ only). It is **not** a CREATE tool, and as of v1.7.1 it is available on
 **every tier** (the former `in_splunk_awareness` gate is deprecated) —
 bounded only by Splunk's own role + index ACLs.
 
-The category also holds the **Phase 3 validation + scoring tools**
-*(new in 1.5.0-dev)*. `splunk_validate_props_conf` and
+The category also holds the **validation + scoring tools**
+*(new in 1.5.0)*. `splunk_validate_props_conf` and
 `splunk_validate_transforms_conf` check a drafted stanza body against Splunk's
 OWN authoritative `.conf.spec` (read **server-side** from
 `$SPLUNK_HOME/etc/system/README/` via the shared parser `bin/itmip_conf_spec_lib.py`)
@@ -1913,7 +1984,7 @@ scores drafted config (it calls the two validators + Magic-8 heuristics);
 The static dimensions are honestly labelled — full timestamp-parse proof needs
 running against the sample post-deploy (`splunk_check_ingest_health`). These
 three tools are **read-only** but `min_capability = data_onboarding`
-(Professional+). The attribute names they validate are grounded by the Phase 2
+(Professional+). The attribute names they validate are grounded by the
 **`conf-spec`** / **`cim-data-models`** knowledge connectors (§4.16) — the same
 `.conf.spec` + installed-CIM the validators read — so the assistant never emits
 an attribute it can't stand behind. They are driven by the new
@@ -1942,7 +2013,7 @@ remediation + deployable package is Enterprise (`security_workflows`), gated ser
 ACL — the audit **cannot** be used to sidestep it); **config / CIM-schema / macro** reads use
 the system token. Index-time parsing config on the indexers is **never** read (a search head
 can't read it) and the audit says so. Driven by the new **`cim-coverage-audit`** skill and the
-**CIM Coverage Audit** playbook (**registered only when `Splunk_SA_CIM` is installed** — hidden
+**CIM Coverage Audit** agent template (**registered only when `Splunk_SA_CIM` is installed**; hidden
 entirely otherwise). Full guide: **the CIM coverage audit guide**.
 
 Alongside it ship three **read-only config helpers** *(new in 1.8.5)* —
@@ -1956,10 +2027,10 @@ CIM-gated (they don't depend on CIM), so any platform team can use them. They re
 | Tool | Tags | Description |
 |---|---|---|
 | `splunk_generate_conf_package` | `write`, `creates-objects`, `package-output`, `onboarding` | Assemble a deployment-ready 4-app config package for a sourcetype and return a downloadable `.tar.gz` (link expires ~1 hour). Returns a `kind:"conf_package"` created-object with a `download_id`. **`min_capability = data_onboarding` (Professional+).** |
-| `splunk_check_ingest_health` *(new in 1.5.0-dev)* | `read-only`, `preflight`, `data-quality`, `onboarding`, `cross-cutting` | **Onboarding-correctness check.** Surface per-sourcetype **ingestion / parsing errors** — timestamp-parse failures (events defaulting to index time), out-of-window timestamps, line truncation, and line-breaking-heuristic warnings (`DateParserVerbose` / `LineBreakingProcessor` / `AggregatorMiningProcessor`) — read from `index=_internal`. The query runs **server-side AS THE SYSTEM USER** (the handler holds the system token), so it works even though ordinary users usually cannot read `_internal`. Returns a per-sourcetype verdict (`ok | warnings | errors`) with counts + a sample message + an `overall` + a caveat (parsing logs live on the indexers; `DateParserVerbose` is throttled, so a clean result is **necessary-not-sufficient**). This is the easiest reliable signal that a feed is mis-onboarded in ways TrackMe can't see — feed-health says "is it flowing?", this says "is it parsed right?". Read-only. **Available on all tiers (incl. Personal) as of v1.7.1** — the former `in_splunk_awareness` (Professional+) gate is **deprecated/removed**; the `itmip_llm/ingest_health` handler no longer refuses below Professional. The only boundary is Splunk's own role + index ACLs (the system token reads `_internal` on the caller's behalf and returns only a small classified verdict — no raw events). |
-| `splunk_validate_props_conf` *(new in 1.5.0-dev)* | `read-only`, `validation`, `config`, `onboarding` | Validate a **props.conf** stanza body against Splunk's OWN authoritative `props.conf.spec` (read server-side from the running install via `itmip_conf_spec_lib`). Catches **unknown / hallucinated / mis-cased attribute names** (silently ignored by Splunk), basic value-type mismatches, and a consistency check (a custom `LINE_BREAKER` needs `SHOULD_LINEMERGE=false`). Pass the stanza body (key=value lines, not the `[header]`). Returns `{ ok, errors[], warnings[], recognized_attributes[], unknown_attributes[], spec_available, splunk_version }`. Call on every generated props stanza before handover; fix every `unknown_attribute`. Degrades gracefully (`spec_available=false`, `ok=true`) on Splunk Cloud. Backed by `itmip_llm/validate_conf`. **`min_capability = data_onboarding` (Professional+).** |
-| `splunk_validate_transforms_conf` *(new in 1.5.0-dev)* | `read-only`, `validation`, `config`, `onboarding` | Validate a **transforms.conf** stanza body against the authoritative `transforms.conf.spec` (server-side). Same checks as `splunk_validate_props_conf` **plus** compiling each `REGEX=` value and flagging an incomplete transform (`REGEX` without `FORMAT`/`DEST_KEY`). Same return shape + graceful Cloud degrade; same `itmip_llm/validate_conf` handler. **`min_capability = data_onboarding` (Professional+).** |
-| `splunk_compute_data_quality_score` *(new in 1.5.0-dev; Cribl modifier in 1.7.0; EP modifier in 1.8.2)* | `read-only`, `scoring`, `data-quality`, `onboarding` | Compute the **Data Quality Score (0–100 + letter grade A–F)** across six weighted dimensions: Magic 8 compliance (30), props.conf validity (15), transforms.conf validity (15), line breaking (10), timestamp parsing (15), CIM alignment (15). `mode="generated"` scores drafted config (pass the props/transforms/tags bodies + sourcetype + optional `cim_models`; props/transforms validity come from the real `.conf.spec` validators). `mode="live"` scores an existing sourcetype (timestamp + line-breaking from `splunk_check_ingest_health`). Returns `{ score, grade, dimensions:{<dim>:{points,max,notes}}, summary }`. Use before handing over a package; iterate if < 90. Static dimensions are honestly labelled — full timestamp-parse proof needs the sample run post-deploy. **1.7.0 — optional `cribl_fronted` input** applies an **upstream-integrity modifier** (calls `splunk_check_cribl_ingest_health`; **monotonic-down only** — caps/reduces, never inflates; non-Cribl feeds unaffected): Cribl `dataloss>0` hard-caps to "not ready", timestamp-default-to-`now` fails the timestamp dimension (+ flags double-parse), parse failures penalise props/transforms, and `silent`/`not_configured` records an "upstream unverified" deduction so a Cribl shop that hasn't forwarded its logs can't silently score an A. **1.8.2 — optional `edge_processor_fronted` input** is the direct sibling (calls `splunk_check_edge_processor_health`; same monotonic-down rule; **mutually exclusive with `cribl_fronted`** — a feed is fronted by one upstream or the other): EP dest-send-failures/drops hard-cap, EP timestamp re-stamp fails the timestamp dimension, pipeline-error/parse failures penalise props/transforms, and `silent`/`not_configured` records the "upstream unverified" deduction. **`min_capability = data_onboarding` (Professional+).** |
+| `splunk_check_ingest_health` *(new in 1.5.0)* | `read-only`, `preflight`, `data-quality`, `onboarding`, `cross-cutting` | **Onboarding-correctness check.** Surface per-sourcetype **ingestion / parsing errors**: timestamp-parse failures (events defaulting to index time), out-of-window timestamps, line truncation, and line-breaking-heuristic warnings (`DateParserVerbose` / `LineBreakingProcessor` / `AggregatorMiningProcessor`), read from `index=_internal`. The query runs **server-side AS THE SYSTEM USER** (the handler holds the system token), so it works even though ordinary users usually cannot read `_internal`. Returns a per-sourcetype verdict (`ok \| warnings \| errors`) with counts + a sample message + an `overall` + a caveat (parsing logs live on the indexers; `DateParserVerbose` is throttled, so a clean result is **necessary-not-sufficient**). This is the easiest reliable signal that a feed is mis-onboarded in ways TrackMe can't see: feed-health says "is it flowing?", this says "is it parsed right?". Read-only. **Available on all tiers (incl. Personal) as of v1.7.1**; the former `in_splunk_awareness` (Professional+) gate is **deprecated/removed**; the `itmip_llm/ingest_health` handler no longer refuses below Professional. The only boundary is Splunk's own role + index ACLs (the system token reads `_internal` on the caller's behalf and returns only a small classified verdict, no raw events). |
+| `splunk_validate_props_conf` *(new in 1.5.0)* | `read-only`, `validation`, `config`, `onboarding` | Validate a **props.conf** stanza body against Splunk's OWN authoritative `props.conf.spec` (read server-side from the running install via `itmip_conf_spec_lib`). Catches **unknown / hallucinated / mis-cased attribute names** (silently ignored by Splunk), basic value-type mismatches, and a consistency check (a custom `LINE_BREAKER` needs `SHOULD_LINEMERGE=false`). Pass the stanza body (key=value lines, not the `[header]`). Returns `{ ok, errors[], warnings[], recognized_attributes[], unknown_attributes[], spec_available, splunk_version }`. Call on every generated props stanza before handover; fix every `unknown_attribute`. Degrades gracefully (`spec_available=false`, `ok=true`) on Splunk Cloud. Backed by `itmip_llm/validate_conf`. **`min_capability = data_onboarding` (Professional+).** |
+| `splunk_validate_transforms_conf` *(new in 1.5.0)* | `read-only`, `validation`, `config`, `onboarding` | Validate a **transforms.conf** stanza body against the authoritative `transforms.conf.spec` (server-side). Same checks as `splunk_validate_props_conf` **plus** compiling each `REGEX=` value and flagging an incomplete transform (`REGEX` without `FORMAT`/`DEST_KEY`). Same return shape + graceful Cloud degrade; same `itmip_llm/validate_conf` handler. **`min_capability = data_onboarding` (Professional+).** |
+| `splunk_compute_data_quality_score` *(new in 1.5.0; Cribl modifier in 1.7.0; EP modifier in 1.8.2)* | `read-only`, `scoring`, `data-quality`, `onboarding` | Compute the **Data Quality Score (0–100 + letter grade A–F)** across six weighted dimensions: Magic 8 compliance (30), props.conf validity (15), transforms.conf validity (15), line breaking (10), timestamp parsing (15), CIM alignment (15). `mode="generated"` scores drafted config (pass the props/transforms/tags bodies + sourcetype + optional `cim_models`; props/transforms validity come from the real `.conf.spec` validators). `mode="live"` scores an existing sourcetype (timestamp + line-breaking from `splunk_check_ingest_health`). Returns `{ score, grade, dimensions:{<dim>:{points,max,notes}}, summary }`. Use before handing over a package; iterate if < 90. Static dimensions are honestly labelled: full timestamp-parse proof needs the sample run post-deploy. **1.7.0: optional `cribl_fronted` input** applies an **upstream-integrity modifier** (calls `splunk_check_cribl_ingest_health`; **monotonic-down only**: caps/reduces, never inflates; non-Cribl feeds unaffected): Cribl `dataloss>0` hard-caps to "not ready", timestamp-default-to-`now` fails the timestamp dimension (+ flags double-parse), parse failures penalise props/transforms, and `silent`/`not_configured` records an "upstream unverified" deduction so a Cribl shop that hasn't forwarded its logs can't silently score an A. **1.8.2: optional `edge_processor_fronted` input** is the direct sibling (calls `splunk_check_edge_processor_health`; same monotonic-down rule; **mutually exclusive with `cribl_fronted`**; a feed is fronted by one upstream or the other): EP dest-send-failures/drops hard-cap, EP timestamp re-stamp fails the timestamp dimension, pipeline-error/parse failures penalise props/transforms, and `silent`/`not_configured` records the "upstream unverified" deduction. **`min_capability = data_onboarding` (Professional+).** |
 | `splunk_check_cribl_ingest_health` *(new in 1.7.0)* | `read-only`, `preflight`, `data-quality`, `onboarding`, `cribl`, `cross-cutting` | **Cribl Stream upstream data-quality check.** When Cribl fronts Splunk, parsing/timestamping/drop decisions move UPSTREAM into Cribl, so a feed can look green in `index=_internal` AND in TrackMe while Cribl already corrupted or dropped the data. Reads the **Cribl monitoring index** (CriblLogs + CriblMetrics; name from `itmip_ai_workbench.conf [cribl] cribl_monitoring_index`) **server-side AS THE SYSTEM USER** (that index is frequently admin/system-only), optionally scoped to one `pipeline`/`source`/`sourcetype` over a clamped window. Returns `{ status, cribl_index, index_present, counts:{datetime,parsing,dataloss,other}, throughput:{events_in,events_out,events_dropped}, events_seen, index_active, top_channels, top_messages, fields_seen, caveat, warnings }`. **Always read `status` first**: `clean` / `clean_with_warnings` (events seen) vs `silent` (events_seen==0 — Cribl isn't logging/forwarding: UNVERIFIED, not a clean bill) vs `not_configured` (forwarding not set up — deliver setup steps, don't fabricate). PIPELINE-LEVEL, not per-event. Bounded query surface (not a generic search proxy). Backed by `itmip_llm/cribl_ingest_health`. **Available on all tiers (incl. Personal) as of v1.7.1** — the former `in_splunk_awareness` (Professional+) gate is **deprecated/removed** (no server-side 403); the only boundary is Splunk's own role + index ACLs (the system token reads the Cribl monitoring index on the caller's behalf and returns only the small classified verdict — no raw events). See the Cribl integration guide + the data-quality check guide. |
 | `splunk_check_edge_processor_health` *(new in 1.8.2)* | `read-only`, `preflight`, `data-quality`, `onboarding`, `edge-processor`, `cross-cutting` | **Splunk Edge Processor upstream data-quality check** — the direct sibling of `splunk_check_cribl_ingest_health`. When EP fronts Splunk, parsing/timestamping/routing/drop decisions move UPSTREAM into EP, so a feed can look green in `index=_internal` AND in TrackMe while EP already dropped, backed-pressured, or re-stamped the data. Reads the **EP operational-metrics index** (`sourcetype=edge-metrics`; index/sourcetype from `itmip_ai_workbench.conf [edge_processor]` `edge_metrics_index` / `edge_metrics_sourcetype`) **server-side AS THE SYSTEM USER** via **`\| mstats`** (EP auto-emits first-class metrics — a metrics search, not an event search), over a clamped window (`edge_max_window_minutes`). Returns `{ status, edge_index, index_present, counts, throughput:{events_in,events_out,events_dropped}, events_seen, index_active, caveat, warnings }`. **Always read `status` first**: `clean` / `clean_with_warnings` (metrics seen) vs `silent` (no metrics — EP isn't emitting/reaching this index: UNVERIFIED, not a clean bill) vs `not_configured` (metrics index/sourcetype absent — deliver setup steps, don't fabricate). COMPONENT/PIPELINE-LEVEL, not per-event; **EP stamps no provenance field**, so absent a customer SPL2 stamp the signal is whole-instance/whole-dataset, never per-feed. Bounded query surface (not a generic search proxy). Backed by `itmip_llm/edge_processor_health`. **Available on all tiers (incl. Personal)** — no `min_capability`; identical posture to the Cribl check (the system token reads the EP metrics index on the caller's behalf and returns only the small classified verdict — no raw events). See the Edge Processor integration guide + the data-quality check guide. |
 | `splunk_audit_cim_coverage` *(new in 1.8.5)* | `read-only` *(diagnosis)* / `write` *(remediation output)*, `data-quality`, `cim`, `onboarding` | **CIM Coverage Audit.** For a `sourcetype` + one or more CIM **datasets** (`{model, dataset}`, e.g. `Network_Traffic.All_Traffic`) compute **per-required-field coverage from REAL events** (present + fill-rate), plus the dataset **constraint/`tag`** check, the **`cim_<Model>_indexes` index-allowlist** check, and the **acceleration** check both ways (`summariesonly` on/off, reported as separate facts). Returns a per-dataset verdict (`ready` / `needs tags` / `index not in CIM allowlist` / `needs aliases` / `needs extraction` / `needs normalization` / `incompatible` + fail-safes `no data` / `unknown model` / `unknown dataset` / `CIM not installed` / `unsupported CIM version`), a per-field table (present / fill-rate / reason / proposed fix + confidence), and **validated, `adjutant_cim_`-namespaced, deploy-tier-annotated** remediation (search-time vs index-time) shown current-vs-proposed. **Never deploys; never overwrites a populated field.** Event/tstats run **as the caller** (respect the caller's index ACL — can't sidestep it); config / CIM-schema / macro reads use the system token; index-time config on the indexers is not read. **Diagnosis: `data_onboarding` (Professional). Remediation generation: `security_workflows` (Enterprise), server-gated** (graceful 403 below Enterprise — diagnosis still returned). Backed by `itmip_llm/cim_audit`. See the CIM coverage audit guide. |
@@ -2036,10 +2107,10 @@ either way.
 | `servicenow_cmdb_upsert` | Write an **allowlisted** CMDB table only (never incident/problem/change). **Gated (write).** |
 | `servicenow_get_security_incidents` / `_create_security_incident` / `_update_security_incident` | SIR security incidents (`sn_si_incident`) with MITRE association + state read-back. **`sir_enabled` only; gated (write) for create/update.** |
 
-**Playbooks/playbooks (category `servicenow`, `required_feature = servicenow`):**
+**Agent templates (category `servicenow`, `required_feature = servicenow`):**
 "ServiceNow CMDB Lookup & Enrichment", "ServiceNow Incident / Event Raise", the three
-alert-driven playbooks ("ServiceNow Incident from Splunk Alert / ITSI Episode / ES Notable")
-+ three closed-incident override runbooks, and the SIR security playbooks ("Security Incident
+alert-driven agent templates ("ServiceNow Incident from Splunk Alert / ITSI Episode / ES Notable")
++ three closed-incident override runbooks, and the SIR security agent templates ("Security Incident
 from ES Notable / Splunk Alert / ITSI Episode") + three SIR override runbooks — the SIR
 security set is **never auto-assigned** (a (sc)admin enables + assigns per Org/BU).
 **Skills:** `servicenow-structured-discipline`, `servicenow-incident-description-authoring`,
@@ -2048,19 +2119,225 @@ grammar + failure runbook (curated) and the `servicenow-cmdb` connector.
 
 ---
 
+### 4.20 Category: `network-policy`
+
+Firewall policy ingestion. Thirteen tools across **three vendors**, forming
+**one ordered chain** rather than eleven independent capabilities: a configuration is acquired, parsed,
+normalised into a vendor-neutral model, and only then read, diffed,
+exported or stored. Each tool names its own successor in its description,
+and each hands the next one a server-side id (`artifact_id`, `parse_id`,
+`snapshot_id`) rather than the data — the configuration text, the syntax
+tree and the expanded tuples never enter the prompt.
+
+**Four vendor expressions land in one model.** An ASA text configuration,
+an FMC access-control collection, a FortiGate `show full-configuration` and
+a PAN-OS set-format `show config running`
+all normalise to the same canonical policy schema, which is what makes a
+cross-vendor diff meaningful. Only INTAKE is vendor-specific: everything
+from `firewall_policy_normalize` onward is shared, so a second vendor adds
+a parser rather than a parallel pipeline — and the one that gets fixed is
+always the one that runs.
+
+The devices and managers these tools reach are **Input Sources**,
+managed on the **Input Sources** tab (admins only). A source carries its
+kind (`file_import`, `watched_directory`, `ssh_device`, `https_api`,
+`jump_host`), its adapter, and a `credential_ref` naming a
+`storage/passwords` entry — **the secret itself is never in the row**. A
+source must be **approved** before any tool will connect to it.
+
+SSH host keys are trust-on-first-use, and the states are worth reading
+precisely because they are easy to misread:
+
+| Connection | What happens |
+|---|---|
+| First one | The fingerprint is **recorded** and the connection is allowed, but the status is `pending` — *awaiting confirmation*, never `pinned`. `pinned` is a claim that a human agreed to it. |
+| Fingerprint matches | Allowed. |
+| Fingerprint changed | **Refused**, whether the pin was confirmed or still `pending`. A key that changes before anyone confirmed the first one is the more alarming case, not the more forgivable one. |
+
+Confirming a pin is an admin action on the **Input Sources** tab, and it
+checks the fingerprint **by value** — the admin confirms the string they
+were shown, not whatever happens to be stored by then. Re-pinning after a
+genuine device replacement is likewise a deliberate *clear*, with a name
+and a reason attached: nothing re-pins automatically on a mismatch,
+because an automatic re-pin is the same as no pinning at all, delivered
+with the paperwork of pinning.
+
+| Tool | Tags | Description |
+|---|---|---|
+| `cisco_asa_config_collect` | `firewall`, `cisco`, `asa`, `import`, `read` | Import ASA configuration **text** and create a protected, secret-scanned source artifact. Does **not** log in to a device. Returns an `artifact_id`, a secret-scan **summary** (never the secrets, never the raw text) and a download id. `sanitize_on_import=true` stores a redacted copy. → `cisco_asa_config_parse` |
+| `cisco_device_configuration_acquire` | `firewall`, `cisco`, `asa`, `acquire`, `ssh`, `gated` | Acquire a running configuration from an **approved** device over SSH and store it as a protected, secret-scanned artifact. Runs a **fixed read-only command profile** — it never changes the device. The artifact defaults to a sanitized copy and raw text is never returned. Needs a saved `connection_id`. **Gated.** → `cisco_asa_config_parse` |
+| `cisco_fmc_collect` | `firewall`, `cisco`, `fmc`, `collect`, `read`, `gated` | Ingest an FMC access-control collection (policies, rules, network + port objects). Takes a pre-fetched `collection`, or collects live from a saved `connection_id` — live collection opens an authenticated HTTPS session to the manager. Returns a `parse_id`. **Gated.** → `firewall_policy_normalize` |
+| `cisco_asa_config_parse` | `firewall`, `cisco`, `asa`, `parse`, `read` | Structurally parse a stored artifact into typed entities **with line evidence**. Returns counts, `parse_status` and warnings — the syntax tree stays server-side. → `firewall_policy_normalize` |
+| `fortinet_config_collect` | `firewall`, `fortinet`, `fortigate`, `import`, `read` | Import FortiGate (FortiOS) configuration **text** and create a protected, secret-scanned artifact. Does **not** log in to a device. Expects `show full-configuration`: plain `show` omits anything at its default value, so a config captured with it is missing the settings most likely to matter in a review. → `fortinet_config_parse` |
+| `fortinet_config_parse` | `firewall`, `fortinet`, `fortigate`, `parse`, `read` | Parse a stored FortiGate artifact into the **same vendor-neutral entities the ASA parser produces**, so `firewall_policy_normalize` consumes it unchanged. Scope is access rules and network and port objects; NAT, VPN, zones and VDOMs are recorded as `unsupported_constructs` rather than dropped. → `firewall_policy_normalize` |
+| `panos_config_collect` | `firewall`, `paloalto`, `panos`, `import`, `read` | Import PAN-OS configuration **text** and create a protected, secret-scanned artifact. Does **not** log in to a device. Expects CLI **set format** — run `set cli config-output-format set` before `show config running`, because the default curly-brace output is a different grammar. → `panos_config_parse` |
+| `panos_config_parse` | `firewall`, `paloalto`, `panos`, `parse`, `read` | Parse a stored PAN-OS artifact into the **same vendor-neutral entities the ASA parser produces**. Rules are read between **zones**, not interface bindings. Two constructs are **recorded rather than flattened** — see below. → `firewall_policy_normalize` |
+| `firewall_policy_normalize` | `firewall`, `normalize`, `canonical`, `read` | Deterministically normalise a parse result into the vendor-neutral canonical schema. Resolves object and group references, **adds the explicit implicit-deny and default-security-level rules** so the model never has to infer them, and keeps FQDNs dynamic. Returns a `snapshot_id`, counts and validation. → `firewall_rule_expand` |
+| `firewall_rule_expand` | `firewall`, `expand`, `tuples`, `read` | Expand normalised rules into effective source/destination/protocol/port tuples, bounded with **explicit** truncation. `mode`: `references_only` (projected sizes, no expansion) / `bounded` (default) / `full` (admin only). FQDN tuples stay dynamic. **A tuple is not proof of end-to-end reachability** — it is what the policy permits, not what the network delivers. |
+| `firewall_policy_diff` | `firewall`, `change-detection`, `drift`, `read` | The change set between two **complete** snapshots of the same device: added / removed / changed (state, membership, logging, modified) / reordered rules, object membership changes, and confidence-scored rename candidates. Distinguishes a change in the source from a change in Adjutant's interpretation via parser and schema versions. |
+| `firewall_policy_export` | `firewall`, `export`, `read` | A versioned JSON export a consumer can read **without touching Adjutant's internal stores**. `kind`: `snapshot` / `rules` / `objects` / `tuples` / `changeset`. Bounded kinds paginate; `as_package=true` stages the full export behind a tokenized, time-limited download and returns a manifest with a content hash. Carries the export-contract and schema versions, and version negotiation is explicit. |
+| `firewall_policy_store` | `firewall`, `store`, `write`, `gated` | Persist an approved snapshot. `targets`: `splunk_index` (immutable history — appends events, `index` required) and/or `splunk_kvstore` (current state). `write_mode`: `create_snapshot` or `upsert_current`. Idempotent per snapshot. **Gated.** |
+
+**PAN-OS has five ways to say no, and two constructs that cannot be
+translated.** `deny`, `drop`, `reset-client`, `reset-server` and `reset-both`
+all block traffic; a parser that recognised only `deny` would read a dropping
+rule as an allow, so an unrecognised action **fails closed to deny** and says
+so. Beyond that, two things the canonical model genuinely cannot express are
+recorded as `unsupported_constructs` — which makes the parse **partial**, so
+the snapshot admits it describes less than the device:
+
+| Construct | Why it is not flattened |
+|---|---|
+| `application <app>` (App-ID) | A rule with `application ssl` and `service any` does not permit every port — it permits what App-ID identifies as SSL. Expanding on ports alone would describe a firewall that permits **more** than it does, which is the dangerous direction for a policy tool. |
+| `negate-source` / `negate-destination` | A negated address means everything **except** the named set. Nothing in the canonical model says that, so the expanded tuples would state the opposite of what the rule matches. |
+| `address-group … dynamic` | Membership resolves on the device from tags and is not in the configuration at all. |
+| Multiple `vsys` | Several virtual systems are several logical firewalls; flattening them into one policy would invent adjacencies between rules that never see each other's traffic. |
+
+**Two FortiOS defaults point opposite ways, and one of them is dangerous.**
+FortiOS omits whatever matches the default, so absence carries meaning:
+a policy with no `set action` line **denies** — `set action accept` is
+written only for a permit — while a policy with no `set status` line is
+**enabled**. A parser carrying the Cisco reflex, where `permit` is always
+spelled out, would read every deny policy in a configuration as an allow;
+the resulting snapshot would pass every downstream check while claiming
+the firewall permits traffic it blocks. The adapter is tested against
+that specific inversion, at the parser and again at the canonical layer.
+
+**The FortiGate and PAN-OS fixtures are both synthetic**, derived from the FortiOS and PAN-OS
+CLI references rather than from production configurations (5 October
+2026). That bounds what the conformance test proves: the adapter reads
+documented syntax correctly and lands in the same canonical model as the
+Cisco adapters. It does not prove the adapter reads what devices actually
+emit — every defect the Cisco adapter found came from real config
+behaviour, not from documentation.
+
+**Deletions are computed, never reported.** `firewall_policy_diff` derives
+removals by comparing two snapshots; nothing asks the device what it
+deleted. So completeness decides what a removal means: if either snapshot
+is not complete, removals come back as `removed_unconfirmed` rather than
+as removals, and `upsert_current` is permitted **only** for a complete
+snapshot. A partial collection therefore cannot be mistaken for a
+device that had its rules removed — which is the failure this design
+exists to prevent.
+
+---
+
+### 4.21 Category: `data-platform`
+
+| Tool | Tags | Description |
+|---|---|---|
+| `splunk_mapping` | `read`, `write`, `integration`, `mapping`, `authoring`, `draft-only`, `drift` | Read and **author** integration mapping specs (source → transforms → destination), Org/BU-scoped. `get` returns the operational version (or a named `version`); `list` returns mappings in scope with status, kind and drift flags; `put` creates a **draft** (lint runs server-side and rejects a bad spec **with its findings**, so the model iterates until it lints clean); `check_drift` compares a mapping's declared `source.fields` for a resource against the fields actually read and returns the drift classes plus whether the `on_drift` policy blocks that resource. |
+| `profiling_capabilities` | `read-only`, `profiling`, `behavioural-analytics`, `mltk` | What behavioural-profiling capability the install actually has, before anything is generated. |
+| `profiling_build_profile` | `profiling`, `behavioural-analytics`, `generation`, `review-required` | Generate a behavioural profile. Carries `review-required`: the output is a proposal for a human, not a shipped artifact. |
+
+**`put` can only ever create a draft.** Promotion to operational is a
+human action under four-eyes in the **Mappings** tab — there is no tool
+argument that promotes. This is what makes the promoted spec a contract:
+a run reads it and applies it, and a run cannot author the thing it is
+being judged against.
+
+---
+
+### 4.22 Category: `fraud`
+
+Ten tools covering fraud detection end to end: find out what the estate can
+support, decide how risk should be scored, generate the two tiers of rule,
+then resolve identities and find rings. Nothing here enables, schedules or
+deploys anything — every generator returns reviewable SPL and a
+`savedsearch` stanza with `disabled=1`.
+
+| Tool | Tags | Description |
+|---|---|---|
+| `splunk_audit_fraud_readiness` | `read-only`, `coverage-audit`, `data-readiness`, `diagnosis` | **Fraud Data Coverage Audit.** Answers from REAL events which fraud use cases this estate can support today, and what exactly is missing for the rest. Four passes; DISCOVERY matches sources to fraud event families by **content signature rather than sourcetype name**, because customer sourcetypes never match the documentation. |
+| `fraud_risk_plan` | `read-only`, `risk-scoring`, `rba` | Decide how risk should be scored here, by **detecting** whether Enterprise Security is installed rather than asking or assuming. Wrong in either direction is costly: a parallel score store on an ES estate splits the risk picture in two, and assuming ES where there is none generates content that writes nowhere. |
+| `fraud_generate_risk_rule` | `risk-scoring`, `rba`, `generation`, `review-required` | **Tier one.** One rule as a WEIGHTED CONTRIBUTION for a resolved entity, never a standalone alert — individual fraud signals are low-confidence, and alerting on each one drowns the team. Weights are bounded; nothing is enabled or scheduled. |
+| `fraud_generate_notable_rule` | `risk-scoring`, `rba`, `generation`, `review-required` | **Tier two.** Sum contributions per entity over a window and raise when the total crosses a threshold. Requires contributions from **two or more rule FAMILIES** by default: several small contributions from different categories mean more than one large score in a single category. |
+| `fraud_risk_ring_scan` | `read-only`, `risk-scoring`, `rba`, `ring-detection` | Find RINGS in the risk index, which a thresholded notable rule structurally cannot do. RBA groups **one entity across many events**; a ring is **many entities sharing one value**. Different axes — so seventeen mule accounts each earning 15 points against a threshold of 40 are seventeen well-behaved customers to the accumulation query, however well it is tuned. |
+| `fraud_migration_discover` | `read-only`, `migration`, `succession` | Is there anything to migrate? Whether the Splunk App for Behavioral Profiling or for Fraud Analytics is installed and enabled, and how much content each holds. When neither is present it says so plainly, and that is a complete answer. |
+| `fraud_migrate_content` | `migration`, `succession`, `review-required` | Import content from a retiring analytics app and map it to native equivalents, for human review. **It never writes to or deletes from the source app** — retirement is the owner's decision, not a side effect of reading. |
+| `fraud_canonicalize_identifiers` | `read-only`, `entity-resolution`, `identity` | Canonicalize identifiers so you count ACTORS, not accounts. Emails are normalised **provider-aware**: Gmail ignores dots, so `john.smith` and `johnsmith` are one mailbox — but for most other domains a dot is significant and is deliberately **not** stripped, because stripping it would merge two real people into a fake "ring". `+tag` sub-addresses are stripped only for providers documented to support them. |
+| `fraud_shared_attribute_pivot` | `read-only`, `entity-resolution`, `ring` | From one entity, walk shared attributes outward and return the linked set **with each link's rarity in this estate**. The pivot runs rarest signal first — identical password hash, reused device fingerprint, common payout account, shared phone or address, canonical mailbox, then source IP — because rings are found by attributes legitimate customers almost never share. |
+| `fraud_velocity_travel` | `read-only`, `velocity`, `impossible-travel` | Rate-of-change and multi-region signals per entity, measured against **the entity's own history** rather than a global average, because account populations are wildly heterogeneous and a global mean is meaningless. Both outputs are explicitly **leads, not verdicts**. |
+
+**The two-tier model is the point, not an implementation detail.** A fraud
+signal on its own is weak evidence; alerting per signal produces a queue
+nobody can work. Tier one contributes weight, tier two accumulates it, and
+the ring scan covers the case accumulation cannot see. Removing any one of
+the three leaves a gap the other two cannot fill.
+
+---
+
+### 4.23 Category: `dashboards-compiler`
+
+| Tool | Tags | Description |
+|---|---|---|
+| `splunk_compile_dashboard` | `write`, `dashboard`, `simplexml`, `compiler`, `validation` | Compile a dashboard from an **intermediate representation** and publish it in ONE call, replacing the whole `splunk_xml_*` builder sequence for agents that carry this category. You describe WHAT the dashboard is (panels, their SPL, the archetype and its layout slots), and the compiler owns base-search factoring, token derivation and binding, XML escaping and layout geometry. |
+| `splunk_revise_dashboard` | `write`, `dashboard`, `simplexml`, `compiler` | Revise a dashboard the compiler already published, by `artifact_fingerprint`, **without rebuilding it**. Takes a JSON merge patch. Only presentational and narrative fields are patchable — titles, descriptions, panel options, narrative slots. Anything structural (panels, base searches, inputs, filter bindings, layout) is **refused with the reason named**. |
+
+**Why structural edits are refused rather than accommodated.** A revision
+that could change panels or bindings would have to re-derive the tokens and
+re-factor the base searches, which is compiling — so it would be a second
+compiler reachable by a different name, and the one that gets fixed would
+not be the one that ran. Recompile instead.
+
+---
+
+### 4.24 Tools the unattended runner adds
+
+Two tools are advertised by the **unattended integration runner** rather
+than the interactive dispatcher. They are not on the **Tools** tab,
+cannot be enabled or disabled per Org or BU through §2.3's ladder, and are
+not among the 196 counted in §6:
+
+| Tool | Advertised when | Description |
+|---|---|---|
+| `splunk_writer` | the integration contract resolves to a **non-empty output allowlist** | Land a batch of records into one Splunk destination: `kvstore` (idempotent upsert via key fields), `index_hec`, `index_spool` or `index_metric` (one metric point per record). Destinations are restricted to the contract's allowlist and the tool **cannot widen it**; `write_mode` is `upsert` or `append` only. The writer never creates indexes. **Prefer a handle** — pass the `batch_ref` a reader returned (or a `snapshot_id`) and the runner streams the rows straight into the mapping; `records` is for small hand-built batches and is size-capped. |
+| `network_input_source_discover` | the caller's Org / BU has the network-policy surface | Propose input sources from what an approved device or manager reports about its **neighbours**: CDP and LLDP neighbour tables on IOS and NX-OS, security contexts on a multi-context ASA, and managed device records from FMC. Writes rows with status `proposed` and **no credential and no adapter**: it can never add, approve or credential a source, and an administrator chooses the adapter when approving. Returns the proposals and what was skipped or already known. **Gated.** |
+
+**Why `batch_ref` matters more than it looks.** It is the reason cost
+stops scaling with row count: the rows are held server-side for the run
+and never enter the transcript. It is also the reason the transcript
+stops being a place data can be corrupted in transit — a row the model
+never saw is a row the model cannot have altered.
+
+**An ASA and an FTD run neither CDP nor LLDP**, so a firewall does not
+discover its neighbours that way. Discovery there comes from security
+contexts or from FMC's managed device records instead.
+
+#### The field that actually gates an unattended run
+
+`allowed_tools` and `allowed_actions` answer different questions:
+
+- **`allowed_tools`** (§4.1, item 1) scopes what the **interactive**
+  dispatcher advertises. The unattended runner builds its tool list from
+  the integration contract instead, so an agent's `allowed_tools` does
+  not narrow an unattended run.
+- **`allowed_actions`** on the integration contract is the control over
+  **writes**, on both paths. It is default-deny and checked immediately
+  before dispatch, so a write tool whose action is not granted is
+  **refused**, not merely hidden. Read-only tools are not gated here —
+  they are bounded by licence capability and Org/BU scope.
+
+Five tools carry an action that must be granted there:
+`cisco_fmc_collect`, `cisco_device_configuration_acquire`,
+`network_input_source_discover`, `firewall_policy_store` and
+`splunk_writer`.
+
+---
+
 ## 5. Cross-reference indices
 
-The default playbooks ship with empty `allowed_tools` / `denied_tools` /
+The agent templates ship with empty `allowed_tools` / `denied_tools` /
 `tool_tag_filters` / `tool_category_filters` arrays — i.e. they don't
 hard-scope which tools they can call. The relationships below are
-**effective wiring**, parsed from each playbook's `prompt_text`
+**effective wiring**, parsed from each agent template's `prompt_text`
 (the LLM is *instructed* to call these tools as part of its workflow).
 Tools marked `(optional)` are conditional on environment (e.g. TrackMe
 installed) or on user follow-up (e.g. alert if requested).
 
-### 5.1 Playbook → tools invoked
+### 5.1 Agent template → tools invoked
 
-| Playbook | Tools invoked |
+| Agent template | Tools invoked |
 |---|---|
 | General | none |
 | Default | `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt` |
@@ -2074,7 +2351,7 @@ installed) or on user follow-up (e.g. alert if requested).
 | Build / improve a lookup | none (recommend-only) |
 | Build / improve a field extraction | `splunk_run_search` |
 | Data onboarding helper | none (recommend-only) — `splunk_check_ingest_health` *(opt — via the `data-onboarding-readiness` skill, if licensed)* |
-| Data Source Onboarding (full) *(1.5.0-dev)* | `splunk_list_indexes`, `splunk_run_search`, `splunk_validate_props_conf`, `splunk_validate_transforms_conf`, `splunk_compute_data_quality_score`, `splunk_check_ingest_health`, `splunk_generate_conf_package` |
+| Data Source Onboarding (full) *(1.5.0)* | `splunk_list_indexes`, `splunk_run_search`, `splunk_validate_props_conf`, `splunk_validate_transforms_conf`, `splunk_compute_data_quality_score`, `splunk_check_ingest_health`, `splunk_generate_conf_package` |
 | Cribl Stream → Splunk data-quality check *(1.7.0)* | `splunk_get_version`, `splunk_check_cribl_ingest_health`, `splunk_check_ingest_health` *(opt — S leg)*, `splunk_compute_data_quality_score` *(opt — Cribl modifier)*, `splunk_run_search`, `splunk_xml_*` *(proof dashboard)*, knowledge route→search→fetch |
 | Edge Processor → Splunk data-quality check *(1.8.2)* | `splunk_get_version`, `splunk_check_edge_processor_health`, `splunk_check_ingest_health` *(opt — S leg)*, `splunk_compute_data_quality_score` *(opt — EP modifier)*, `splunk_run_search`, `splunk_xml_*` *(proof dashboard)*, knowledge route→search→fetch |
 | CIM Coverage Audit *(1.8.5; registered only when `Splunk_SA_CIM` is installed)* | `splunk_get_version`, `splunk_check_sourcetype_exists`, `splunk_audit_cim_coverage`, `splunk_get_props_conf` *(opt)*, `splunk_get_transforms_conf` *(opt)*, `splunk_run_search`, `splunk_validate_props_conf` *(opt — remediation)*, `splunk_validate_transforms_conf` *(opt — remediation)*, knowledge route→search→fetch |
@@ -2118,19 +2395,19 @@ installed) or on user follow-up (e.g. alert if requested).
 | TrackMe — Event-count anomaly deep dive | `splunk_get_version`, `trackme_health_for_indexes` *(opt)*, `trackme_get_entity_metrics`, `trackme_get_outliers`, `trackme_smart_status`, `trackme_list_acks`, `trackme_list_maintenance`, `trackme_list_entities`, `trackme_get_identity_card` |
 | TrackMe — Onboard a new data source | `splunk_get_version`, `splunk_run_search`, `trackme_health_for_indexes`, `trackme_get_cim_compliance` *(opt)*, `trackme_get_entity`, `trackme_get_identity_card`, `trackme_get_outliers` |
 
-### 5.2 Tool → playbooks that invoke it
+### 5.2 Tool → agent templates that invoke it
 
 Reverse index — useful for impact analysis ("if I disable this tool
-for a tenant, which playbooks break?"). Tools not listed below are
-never named in any default playbook's `prompt_text` (most still ship
+for an Org or BU, which agents break?"). Tools not listed below are
+never named in any agent template's `prompt_text` (most still ship
 to the LLM via `splunk_route_tools` discovery; they just aren't
-explicitly orchestrated by a default playbook).
+explicitly orchestrated by an agent template).
 
-| Tool | Playbooks that invoke it |
+| Tool | Agent templates that invoke it |
 |---|---|
-| `splunk_get_version` | Build a SPL search • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit playbooks • Build a Dashboard Studio JSON dashboard • Data troubleshooting helper • all ES playbooks • all ITSI playbooks • TrackMe — ITSI KPI root-cause assistant • TrackMe — ES detection data-readiness check • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source |
-| `splunk_list_indexes` | Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit playbooks (except Stats vs ML helper, `ai` command) • Build a Dashboard Studio JSON dashboard • Data troubleshooting helper • Investigation • Data Source Onboarding (full) |
-| `splunk_list_apps` | all AI Toolkit playbooks |
+| `splunk_get_version` | Build a SPL search • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit agent templates • Build a Dashboard Studio JSON dashboard • Data troubleshooting helper • all ES agent templates • all ITSI agent templates • TrackMe — ITSI KPI root-cause assistant • TrackMe — ES detection data-readiness check • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source |
+| `splunk_list_indexes` | Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit agent templates (except Stats vs ML helper, `ai` command) • Build a Dashboard Studio JSON dashboard • Data troubleshooting helper • Investigation • Data Source Onboarding (full) |
+| `splunk_list_apps` | all AI Toolkit agent templates |
 | `splunk_list_lookups` | Build a SPL search • Improve an existing SPL • Improve a Simple XML dashboard |
 | `splunk_list_saved_searches` | Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Build / improve an alert • AI Toolkit – Smart outlier detection (single metric) • Audit & refresh an existing ML use case • Build a Dashboard Studio JSON dashboard |
 | `splunk_list_visualizations` | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • Build a Dashboard Studio JSON dashboard |
@@ -2139,19 +2416,19 @@ explicitly orchestrated by a default playbook).
 | `splunk_get_lookup_sample` | (none — currently surfaced only via routing) |
 | `splunk_list_use_case_templates` | Default • Data troubleshooting helper |
 | `splunk_get_use_case_template_prompt` | Default |
-| `splunk_run_search` | Build a SPL search • Improve an existing SPL • Build / improve a field extraction • Data correlation helper • Data enrichment helper • most AI Toolkit playbooks • Investigation • Data troubleshooting helper • ES — Triage a notable • ES — Daily SOC handoff summary • all ITSI playbooks • TrackMe — Onboard a new data source • Audit & refresh an existing ML use case • Data Source Onboarding (full) |
+| `splunk_run_search` | Build a SPL search • Improve an existing SPL • Build / improve a field extraction • Data correlation helper • Data enrichment helper • most AI Toolkit agent templates • Investigation • Data troubleshooting helper • ES — Triage a notable • ES — Daily SOC handoff summary • all ITSI agent templates • TrackMe — Onboard a new data source • Audit & refresh an existing ML use case • Data Source Onboarding (full) |
 | `splunk_run_saved_search_by_name` | AI Toolkit – Smart outlier detection (single metric) • Multi-field anomaly • Smart forecasting • Smart clustering • Smart prediction |
-| `splunk_create_saved_search` | Build a SPL search • Improve an existing SPL • most AI Toolkit playbooks |
+| `splunk_create_saved_search` | Build a SPL search • Improve an existing SPL • most AI Toolkit agent templates |
 | `splunk_update_saved_search` | Improve an existing SPL • Audit & refresh an existing ML use case |
 | `splunk_get_dashboard_xml` | Build a Simple XML dashboard • AI Toolkit – Smart outlier detection (single metric) • Audit & refresh an existing ML use case |
-| `splunk_create_dashboard_xml` | Build a Simple XML dashboard • Build / improve an alert • all AI Toolkit dashboarding playbooks • Investigation |
+| `splunk_create_dashboard_xml` | Build a Simple XML dashboard • Build / improve an alert • all AI Toolkit dashboarding agent templates • Investigation |
 | `splunk_update_dashboard_xml` | Build a Simple XML dashboard • Improve a Simple XML dashboard • AI Toolkit – Smart outlier detection (single metric) • Audit & refresh an existing ML use case • Investigation |
 | `splunk_get_dashboard_panel_data` | Build a Simple XML dashboard • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Smart forecasting • Investigation |
 | `splunk_check_studio_runtime` | Build a Dashboard Studio JSON dashboard |
-| `splunk_list_studio_reference_stanzas` | (none in default playbooks — referenced by the Studio prompt at execution time via `splunk_route_tools` discovery) |
+| `splunk_list_studio_reference_stanzas` | (none in agent templates; referenced by the Studio prompt at execution time via `splunk_route_tools` discovery) |
 | `splunk_get_studio_reference_stanza` | (same as above) |
 | `splunk_get_dashboard_studio_json` | Build a Dashboard Studio JSON dashboard |
-| `splunk_create_dashboard_studio_json` | (none directly — the Studio playbook builds via `splunk_builder_publish`) |
+| `splunk_create_dashboard_studio_json` | (none directly; the Studio agent template builds via `splunk_builder_publish`) |
 | `splunk_update_dashboard_studio_json` | Build a Dashboard Studio JSON dashboard |
 | `splunk_get_dashboard_studio_panel_data` | (none directly — `splunk_builder_publish` calls it internally) |
 | `splunk_builder_create_dashboard` | Build a Dashboard Studio JSON dashboard |
@@ -2165,33 +2442,33 @@ explicitly orchestrated by a default playbook).
 | `splunk_create_alert` | Build / improve an alert • AI Toolkit – Outlier ALERT + diagnostic dashboard • optional in Smart outlier / Multi-field / Forecasting / ONNX / SageMaker / `ai` |
 | `splunk_update_alert` | Audit & refresh an existing ML use case |
 | `splunk_share_mltk_model_globally` | AI Toolkit – Smart outlier detection (single metric) • Multi-field anomaly • Smart forecasting • Smart clustering • Smart prediction • Outlier ALERT + diagnostic dashboard |
-| `splunk_generate_conf_package` *(1.5.0-dev)* | Data Source Onboarding (full) |
-| `splunk_check_ingest_health` *(1.5.0-dev)* | Data Source Onboarding (full) • Data onboarding helper *(via `data-onboarding-readiness`)*; reusable as a preflight by any playbook that builds time-based artifacts on a sourcetype |
-| `splunk_validate_props_conf` *(1.5.0-dev)* | Data Source Onboarding (full); reusable by any playbook that generates props.conf (via `magic-8-compliance`) |
-| `splunk_validate_transforms_conf` *(1.5.0-dev)* | Data Source Onboarding (full); reusable by any playbook that generates transforms.conf (via `magic-8-compliance`) |
-| `splunk_compute_data_quality_score` *(1.5.0-dev)* | Data Source Onboarding (full); Cribl Stream → Splunk data-quality check *(1.7.0 — with the `cribl_fronted` upstream-integrity modifier)*; Edge Processor → Splunk data-quality check *(1.8.2 — with the `edge_processor_fronted` upstream-integrity modifier)*; reusable by any onboarding/audit playbook that wants a 0–100 Data Quality Score (via `magic-8-compliance`) |
-| `splunk_check_cribl_ingest_health` *(1.7.0)* | Cribl Stream → Splunk data-quality check; also unlocked via the `cribl-stream-data-quality` curated entry's `assigned_tools`; reusable by any onboarding/troubleshooting playbook touching a Cribl-fronted feed |
-| `splunk_check_edge_processor_health` *(1.8.2)* | Edge Processor → Splunk data-quality check; also unlocked via the `edge-processor-data-quality` curated entry's `assigned_tools`; reusable by any onboarding/troubleshooting playbook touching an Edge-Processor-fronted feed |
-| `splunk_check_ml_capabilities` | (none in default playbooks — used for routing) |
-| `splunk_list_ml_models` | (none in default playbooks — used for routing) |
-| `splunk_ai_command` | (none in default playbooks — the *Ask external LLM* playbook uses the AI Toolkit's own `\| ai` SPL command, not this tool) |
-| `splunk_route_tools` | (no default playbook invokes — used by the runtime when no playbook scope is set) |
+| `splunk_generate_conf_package` *(1.5.0)* | Data Source Onboarding (full) |
+| `splunk_check_ingest_health` *(1.5.0)* | Data Source Onboarding (full) • Data onboarding helper *(via `data-onboarding-readiness`)*; reusable as a preflight by any agent that builds time-based artifacts on a sourcetype |
+| `splunk_validate_props_conf` *(1.5.0)* | Data Source Onboarding (full); reusable by any agent that generates props.conf (via `magic-8-compliance`) |
+| `splunk_validate_transforms_conf` *(1.5.0)* | Data Source Onboarding (full); reusable by any agent that generates transforms.conf (via `magic-8-compliance`) |
+| `splunk_compute_data_quality_score` *(1.5.0)* | Data Source Onboarding (full); Cribl Stream → Splunk data-quality check *(1.7.0, with the `cribl_fronted` upstream-integrity modifier)*; Edge Processor → Splunk data-quality check *(1.8.2, with the `edge_processor_fronted` upstream-integrity modifier)*; reusable by any onboarding/audit agent that wants a 0 to 100 Data Quality Score (via `magic-8-compliance`) |
+| `splunk_check_cribl_ingest_health` *(1.7.0)* | Cribl Stream → Splunk data-quality check; also unlocked via the `cribl-stream-data-quality` curated entry's `assigned_tools`; reusable by any onboarding/troubleshooting agent touching a Cribl-fronted feed |
+| `splunk_check_edge_processor_health` *(1.8.2)* | Edge Processor → Splunk data-quality check; also unlocked via the `edge-processor-data-quality` curated entry's `assigned_tools`; reusable by any onboarding/troubleshooting agent touching an Edge-Processor-fronted feed |
+| `splunk_check_ml_capabilities` | (none in agent templates; used for routing) |
+| `splunk_list_ml_models` | (none in agent templates; used for routing) |
+| `splunk_ai_command` | (none in agent templates; the *Ask external LLM* agent template uses the AI Toolkit's own `\| ai` SPL command, not this tool) |
+| `splunk_route_tools` | (no agent template invokes; used by the runtime when no agent scope is set) |
 | `es_get_notable` | ES — Triage a notable • ES — Tune a noisy correlation search |
 | `es_list_notables` | ES — Triage a notable • ES — Investigate a user • ES — Investigate a host • ES — Investigate an IOC • ES — Phishing email triage • ES — Lateral movement check • ES — Detection coverage gap analysis • ES — Daily SOC handoff summary • ES — Tune a noisy correlation search • TrackMe — ES detection data-readiness check • Investigation |
 | `es_update_notable` | ES — Triage a notable (only on user confirm) |
 | `es_get_notable_drilldown` | ES — Triage a notable |
 | `es_get_risk_score` | ES — Triage a notable • ES — Investigate a user • ES — Investigate a host • ES — Lateral movement check • ES — Phishing email triage |
 | `es_list_risk_events` | ES — Triage a notable • ES — Investigate a user |
-| `es_list_risk_rules` | (none in default playbooks — used for routing) |
+| `es_list_risk_rules` | (none in agent templates; used for routing) |
 | `es_threat_lookup` | ES — Triage a notable • ES — Investigate an IOC • ES — Phishing email triage |
 | `es_list_threat_sources` | ES — Daily SOC handoff summary |
 | `es_asset_lookup` | ES — Triage a notable • ES — Investigate a host • ES — Investigate an IOC • ES — Lateral movement check • ES — Tune a noisy correlation search |
 | `es_identity_lookup` | ES — Triage a notable • ES — Investigate a user • ES — Investigate an IOC • ES — Phishing email triage • ES — Lateral movement check • ES — Tune a noisy correlation search |
-| `es_list_investigations` / `es_get_investigation` / `es_add_investigation_note` | (none in default playbooks — surface for custom workflows) |
+| `es_list_investigations` / `es_get_investigation` / `es_add_investigation_note` | (none in agent templates; surface for custom workflows) |
 | `es_list_correlation_searches` | ES — Detection coverage gap analysis |
 | `es_get_correlation_search` | ES — Detection coverage gap analysis • ES — Tune a noisy correlation search • TrackMe — ES detection data-readiness check |
 | `es_cim_search` | ES — Investigate a user • ES — Investigate a host • ES — Investigate an IOC • ES — Phishing email triage • ES — Lateral movement check |
-| `es_describe_cim_model` | (none in default playbooks) |
+| `es_describe_cim_model` | (none in agent templates) |
 | `es_list_adaptive_responses` | ES — Investigate an IOC |
 | `itsi_list_services` | ITSI — Diagnose service degradation |
 | `itsi_get_service` | ITSI — Diagnose service degradation • ITSI — Root-cause an episode • ITSI — Impact analysis • ITSI — Entity health check |
@@ -2204,145 +2481,215 @@ explicitly orchestrated by a default playbook).
 | `itsi_get_entity` | ITSI — Root-cause an episode • ITSI — Impact analysis • ITSI — Entity health check |
 | `itsi_list_episodes` | ITSI — Diagnose service degradation • ITSI — Service health timeline • ITSI — Episode triage queue summary • Investigation |
 | `itsi_get_episode` | ITSI — Root-cause an episode • ITSI — Episode triage queue summary • Investigation |
-| `itsi_update_episode` | (none in default playbooks — gated tool, requires user confirm via custom flow) |
-| `itsi_list_glass_tables` / `itsi_list_deep_dives` | (none in default playbooks) |
+| `itsi_update_episode` | (none in agent templates; gated tool, requires user confirm via custom flow) |
+| `itsi_list_glass_tables` / `itsi_list_deep_dives` | (none in agent templates) |
 | `itsi_list_neaps` | ITSI — Root-cause an episode |
 | `trackme_get_version` | TrackMe — Morning data-health check • TrackMe — Empty-result investigator |
 | `trackme_list_tenants` | TrackMe — Morning data-health check |
-| `trackme_get_tenant` | (none in default playbooks) |
+| `trackme_get_tenant` | (none in agent templates) |
 | `trackme_list_entities` | TrackMe — Morning data-health check • TrackMe — Event-count anomaly deep dive • ES — Daily SOC handoff summary *(opt)* |
 | `trackme_get_entity` | TrackMe — Onboard a new data source |
 | `trackme_smart_status` | TrackMe — Empty-result investigator • TrackMe — ITSI KPI root-cause assistant • TrackMe — Event-count anomaly deep dive |
 | `trackme_get_entity_metrics` | TrackMe — Empty-result investigator • TrackMe — Event-count anomaly deep dive |
 | `trackme_get_outliers` | TrackMe — Morning data-health check • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source |
 | `trackme_get_cim_compliance` | TrackMe — ES detection data-readiness check • TrackMe — Onboard a new data source • ES — Detection coverage gap analysis *(opt)* |
-| `trackme_list_cim_issues` | (none in default playbooks) |
+| `trackme_list_cim_issues` | (none in agent templates) |
 | `trackme_get_workload_status` | TrackMe — Morning data-health check |
 | `trackme_get_search_perf` | TrackMe — ITSI KPI root-cause assistant *(opt)* |
 | `trackme_list_acks` | TrackMe — Morning data-health check • TrackMe — Empty-result investigator • TrackMe — ITSI KPI root-cause assistant • TrackMe — Event-count anomaly deep dive • Data troubleshooting helper • Investigation |
 | `trackme_list_maintenance` | TrackMe — Morning data-health check • TrackMe — Empty-result investigator • TrackMe — Event-count anomaly deep dive • Data troubleshooting helper • Investigation |
 | `trackme_get_identity_card` | TrackMe — Empty-result investigator • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source |
-| `trackme_ack_entity` / `trackme_update_entity_priority` / `trackme_update_maintenance` | (none in default playbooks — gated write tools, surfaced for custom workflows) |
-| `trackme_health_for_indexes` | Data troubleshooting helper • Investigation • TrackMe — Empty-result investigator • TrackMe — ITSI KPI root-cause assistant • TrackMe — ES detection data-readiness check • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source • all ES playbooks *(opt)* • most ITSI playbooks *(opt)* |
+| `trackme_ack_entity` / `trackme_update_entity_priority` / `trackme_update_maintenance` | (none in agent templates; gated write tools, surfaced for custom workflows) |
+| `trackme_health_for_indexes` | Data troubleshooting helper • Investigation • TrackMe — Empty-result investigator • TrackMe — ITSI KPI root-cause assistant • TrackMe — ES detection data-readiness check • TrackMe — Event-count anomaly deep dive • TrackMe — Onboard a new data source • all ES agent templates *(opt)* • most ITSI agent templates *(opt)* |
 
-### 5.3 Playbook → skills included
+### 5.3 Agent template → skills included
 
-Forward index of every playbook's `includes_skills`. The
-`general-output-style` skill is auto-included by the runtime for every
-playbook that is not `is_general` / `is_default` — it is NOT listed in
-the rows below (it would just clutter the table) but is always present
-in the assembled prompt.
+Forward index of every agent template's `includes_skills`, in declared order, rebuilt from
+the shipped seed (`default/data/seeds/itmip_ai_use_cases.json`). Of the 90 agent
+templates, 81 declare at least one skill (58 ready, 23 in preview) and
+9 declare none: General, Default, Build / improve a lookup, Generic Alert Triage, ES Notable Triage, MCP Example: Read-only Health Check, Adjutant AI Behaviour Analysis, ServiceNow Sync (mapping-driven), Cisco ASA Policy Ingestion (mapping-driven). *(preview)* marks an agent template in preview.
 
-| Playbook | includes_skills (declared order) |
+The runtime adds `general-output-style` in front of the declared skills for every agent
+except General (which carries the base guardrails) and Default (the router), so it is not
+repeated in the rows below. No agent template declares it. A declared skill can still be
+left out when the prompt is assembled: when its dependent app is not installed, when it is
+outside the user's scope, or, for `dashboard-proof-required` and
+`alert-companion-dashboard`, when **Also build a proof dashboard** is off.
+
+| Agent template | `includes_skills` (declared order) |
 |---|---|
-| General | — (defines `general-output-style` upstream; nothing to include) |
-| Default | — (router only) |
-| Build a SPL search | `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` |
-| Improve an existing SPL | `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` |
-| Build a Simple XML dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `feed-health-verdict` • `naming-collision-handling` |
-| Improve a Simple XML dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `naming-collision-handling` |
-| ATT&CK Tactic Hunt — Technique Coverage Dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` • `read-only-by-default-soc` *(ES-gated)* • `consult-security-knowledge-first` • `hunt-evidence-honesty` • `demo-dataset-time-reanchor` • `feed-health-verdict` *(opt)* |
-| Build a Dashboard Studio JSON dashboard | `dashboard-studio-versioning` • `viz-best-fit` • `naming-collision-handling` |
+| Build a SPL search | `spl-perf-priorities` • `spl-validation-loop` • `spl-intent-coverage` • `metric-vs-event-index-aware` • `naming-collision-handling` |
+| Improve an existing SPL | `spl-review-conduct` • `spl-review-correctness` • `spl-review-rewrites` • `spl-review-evidence` • `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` • `dashboard-ir-authoring` |
+| Explain a SPL search | `spl-stage-sampling` • `spl-behaviour-vs-data` • `spl-cim-model-gaps` • `spl-inline-comment-rules` • `explain-dashboard-layout` • `explain-dashboard-style` • `metric-vs-event-index-aware` • `naming-collision-handling` |
+| Build a Simple XML dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-ingestion-health` • `viz-best-fit` • `spl-perf-priorities` • `naming-collision-handling` |
+| Improve a Simple XML dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-ingestion-health` • `viz-best-fit` • `spl-perf-priorities` • `naming-collision-handling` |
+| Build a Dashboard Studio JSON dashboard *(preview)* | `dashboard-studio-versioning` • `viz-best-fit` • `spl-perf-priorities` • `naming-collision-handling` |
 | Build / improve an alert | `alert-companion-dashboard` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `spl-perf-priorities` • `spl-validation-loop` • `feed-health-verdict` • `dashboard-proof-required` • `naming-collision-handling` |
 | Build / improve a report | `spl-perf-priorities` |
-| Build / improve a lookup | — (recommend-only; nothing actionable from a skill) |
 | Build / improve a field extraction | `spl-validation-loop` |
-| Data onboarding helper | `data-onboarding-readiness` *(1.5.0-dev)* • `feed-health-verdict` |
-| Data Source Onboarding (full) *(1.5.0-dev)* | `conf-package-discipline` • `magic-8-compliance` • `data-onboarding-readiness` • `naming-collision-handling` |
-| Cribl Stream → Splunk data-quality check *(1.7.0)* | `data-onboarding-readiness` • `cribl-field-discovery` • `consult-security-knowledge-first` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `metric-vs-event-index-aware` • `feed-health-verdict` |
-| Edge Processor → Splunk data-quality check *(1.8.2)* | `data-onboarding-readiness` • `edge-processor-discovery` • `consult-security-knowledge-first` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `metric-vs-event-index-aware` • `feed-health-verdict` |
+| Data onboarding helper | `data-onboarding-readiness` • `feed-health-verdict` |
+| CIM Coverage Audit | `cim-coverage-audit` • `magic-8-compliance` • `data-onboarding-readiness` |
+| Data Source Onboarding (full) | `conf-package-discipline` • `magic-8-compliance` • `data-onboarding-readiness` • `naming-collision-handling` |
+| Cribl Stream → Splunk data-quality check | `data-onboarding-readiness` • `cribl-field-discovery` • `consult-security-knowledge-first` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `metric-vs-event-index-aware` • `feed-health-verdict` |
+| Edge Processor → Splunk data-quality check | `data-onboarding-readiness` • `edge-processor-discovery` • `consult-security-knowledge-first` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `metric-vs-event-index-aware` • `feed-health-verdict` |
 | Data visualization helper | `viz-best-fit` |
 | Data correlation helper | `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` |
 | Data enrichment helper | `spl-validation-loop` |
 | AI Toolkit – Smart outlier detection (single metric) | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
-| AI Toolkit – Multi-field anomaly detection | (same as Smart outlier detection) |
-| AI Toolkit – Smart forecasting | (same as Smart outlier detection) |
-| AI Toolkit – Smart clustering | (same as Smart outlier detection) |
-| AI Toolkit – Smart prediction | (same as Smart outlier detection) |
-| AI Toolkit – Outlier ALERT + diagnostic dashboard | (same as Smart outlier detection) + `alert-companion-dashboard` |
+| AI Toolkit – Multi-field anomaly detection | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – Smart forecasting | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – CDTSM Smart Forecasting | `cdtsm-discipline` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `feed-health-verdict` • `naming-collision-handling` |
+| AI Toolkit – CDTSM Anomaly Detection | `cdtsm-discipline` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `feed-health-verdict` • `naming-collision-handling` |
+| AI Toolkit – CDTSM Predictive Alerting | `cdtsm-discipline` • `alert-companion-dashboard` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `feed-health-verdict` • `naming-collision-handling` |
+| AI Toolkit – Smart clustering | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – Smart prediction (categorical or numeric) | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – Outlier ALERT + diagnostic dashboard | `ml-data-readiness-precheck` • `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `alert-companion-dashboard` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
 | AI Toolkit – Stats vs ML decision helper | `ml-data-readiness-precheck` • `spl-validation-loop` |
-| AI Toolkit – Bring your own ONNX model | `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
-| AI Toolkit – Score against an AWS SageMaker endpoint | (same as ONNX) |
-| AI Toolkit – Ask an external LLM (`ai` command) | `ml-aiworkbench-naming-and-share` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `spl-perf-priorities` • `naming-collision-handling` |
+| AI Toolkit – Bring your own ONNX model (score in Splunk) | `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – Score against an AWS SageMaker endpoint | `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `dashboard-proof-required` • `spl-perf-priorities` • `spl-validation-loop` • `naming-collision-handling` |
+| AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) | `ml-aiworkbench-naming-and-share` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `spl-perf-priorities` • `naming-collision-handling` |
 | Audit & refresh an existing ML use case | `ml-aiworkbench-naming-and-share` • `ml-self-correct-budget` • `dashboard-xml-validation-loop` • `spl-validation-loop` • `naming-collision-handling` |
 | Data troubleshooting helper | `feed-health-verdict` • `metric-vs-event-index-aware` • `spl-perf-priorities` • `spl-validation-loop` |
-| Investigation | `feed-health-verdict` • `metric-vs-event-index-aware` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-proof-required` • `viz-best-fit` • `data-vs-service-distinction` |
-| ES — Triage a notable | `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
-| ES — Investigate a user / host / IOC / Phishing / Lateral / Coverage gap | (same as ES — Triage a notable) |
-| ES — Daily SOC handoff summary | `read-only-by-default-soc` • `feed-health-verdict` |
-| ES — Tune a noisy correlation search | `read-only-by-default-soc` • `spl-perf-priorities` |
-| ITSI — Diagnose service degradation | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` • `spl-perf-priorities` • `spl-validation-loop` |
-| ITSI — Root-cause an episode / Service health timeline / KPI threshold review | (same as ITSI — Diagnose service degradation) |
-| ITSI — Impact analysis | `read-only-by-default-itops` |
-| ITSI — Episode triage queue summary | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` |
-| ITSI — Entity health check | `read-only-by-default-itops` • `feed-health-verdict` |
-| TrackMe — Morning data-health check | `feed-health-verdict` |
-| TrackMe — Empty-result investigator | `feed-health-verdict` • `data-vs-service-distinction` • `metric-vs-event-index-aware` |
-| TrackMe — ITSI KPI root-cause assistant | `feed-health-verdict` • `data-vs-service-distinction` • `read-only-by-default-itops` |
-| TrackMe — ES detection data-readiness check | `feed-health-verdict` • `read-only-by-default-soc` |
-| TrackMe — Event-count anomaly deep dive | `feed-health-verdict` • `data-vs-service-distinction` |
-| TrackMe — Onboard a new data source | `feed-health-verdict` |
+| Investigation | `feed-health-verdict` • `dashboard-ingestion-health` • `data-onboarding-readiness` • `metric-vs-event-index-aware` • `spl-perf-priorities` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-proof-required` • `viz-best-fit` • `data-vs-service-distinction` |
+| ES — Triage a notable *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Investigate a user *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Investigate a host *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Investigate an IOC *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Phishing email triage *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Lateral movement check *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Detection coverage gap analysis *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` • `spl-validation-loop` |
+| ES — Daily SOC handoff summary *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` |
+| ES — Tune a noisy correlation search *(preview)* | `consult-security-knowledge-first` • `read-only-by-default-soc` • `feed-health-verdict` • `spl-perf-priorities` |
+| ITSI — Automatic Root Cause Analysis | `read-only-by-default-itops` • `kpi-data-lineage` • `monitoring-self-health` • `data-vs-service-distinction` • `feed-health-verdict` • `rca-probable-cause-language` |
+| ITSI — Diagnose service degradation *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` • `spl-perf-priorities` • `spl-validation-loop` |
+| ITSI — Root-cause an episode | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` • `spl-perf-priorities` • `spl-validation-loop` |
+| ITSI — Service health timeline *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` • `spl-perf-priorities` • `spl-validation-loop` |
+| ITSI — KPI threshold review *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` • `spl-perf-priorities` • `spl-validation-loop` |
+| ITSI — Impact analysis *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` |
+| ITSI — Episode triage queue summary *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` • `data-vs-service-distinction` |
+| ITSI — Entity health check *(preview)* | `read-only-by-default-itops` • `feed-health-verdict` |
+| TrackMe — Morning data-health check *(preview)* | `feed-health-verdict` |
+| TrackMe — Empty-result investigator *(preview)* | `feed-health-verdict` • `data-vs-service-distinction` • `metric-vs-event-index-aware` |
+| TrackMe — ITSI KPI root-cause assistant *(preview)* | `feed-health-verdict` • `data-vs-service-distinction` • `read-only-by-default-itops` |
+| TrackMe — ES detection data-readiness check *(preview)* | `consult-security-knowledge-first` • `feed-health-verdict` • `read-only-by-default-soc` |
+| TrackMe — Event-count anomaly deep dive *(preview)* | `feed-health-verdict` • `data-vs-service-distinction` |
+| TrackMe — Onboard a new data source *(preview)* | `feed-health-verdict` |
+| Create your own agent | `template-authoring-discipline` • `prompt-injection-defense-on-authored-content` • `naming-collision-handling` |
+| Update your own agent | `template-authoring-discipline` • `prompt-injection-defense-on-authored-content` |
+| ATT&CK Tactic Hunt — Technique Coverage Dashboard | `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `viz-best-fit` • `spl-perf-priorities` • `spl-validation-loop` • `metric-vs-event-index-aware` • `naming-collision-handling` • `read-only-by-default-soc` • `consult-security-knowledge-first` • `hunt-evidence-honesty` • `demo-dataset-time-reanchor` • `feed-health-verdict` |
+| ServiceNow CMDB Lookup & Enrichment | `servicenow-structured-discipline` |
+| ServiceNow Incident / Event Raise | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Incident from Splunk Alert | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Incident from ITSI Episode | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Incident from ES Notable | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Closed-Incident: Create New | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Closed-Incident: Reopen | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| ServiceNow Closed-Incident: Suppress | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Incident from ES Notable | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Incident from Splunk Alert | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Incident from ITSI Episode | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Closed-Incident: Create New | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Closed-Incident: Reopen | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Security Closed-Incident: Suppress | `servicenow-structured-discipline` • `servicenow-incident-description-authoring` |
+| Fraud Data Coverage Audit | `consult-security-knowledge-first` • `hunt-evidence-honesty` • `data-onboarding-readiness` • `fraud-entity-resolution` • `feed-health-verdict` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-proof-required` • `fraud-dashboard-structure` |
+| Fraud Rule Builder | `fraud-risk-scoring-discipline` • `detection-scope-fidelity` • `fraud-entity-resolution` • `consult-security-knowledge-first` • `spl-validation-loop` • `spl-perf-priorities` • `dashboard-ir-authoring` • `fraud-dashboard-structure` • `feed-health-verdict` |
+| Fraud Ring Mapper | `fraud-entity-resolution` • `hunt-evidence-honesty` • `consult-security-knowledge-first` • `spl-validation-loop` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `fraud-dashboard-structure` • `dashboard-proof-required` • `feed-health-verdict` |
+| Fraud Alert Triage | `fraud-entity-resolution` • `fraud-risk-scoring-discipline` • `feed-health-verdict` • `hunt-evidence-honesty` • `consult-security-knowledge-first` • `data-onboarding-readiness` |
+| Fraud Notable Triage (Enterprise Security) | `fraud-entity-resolution` • `fraud-risk-scoring-discipline` • `feed-health-verdict` • `hunt-evidence-honesty` • `consult-security-knowledge-first` |
+| Benefits and Claims Triage | `fraud-entity-resolution` • `feed-health-verdict` • `hunt-evidence-honesty` • `consult-security-knowledge-first` |
+| Behavioral Profile Builder | `spl-validation-loop` • `spl-perf-priorities` • `hunt-evidence-honesty` • `feed-health-verdict` • `consult-security-knowledge-first` |
+| Fraud Command Center *(preview)* | `fraud-entity-resolution` • `fraud-risk-scoring-discipline` • `hunt-evidence-honesty` • `dashboard-xml-discipline` • `dashboard-xml-validation-loop` • `dashboard-proof-required` • `spl-validation-loop` • `fraud-dashboard-structure` • `feed-health-verdict` |
 
-### 5.4 Skill → playbooks that include it
+### 5.4 Skill → agent templates that include it
 
-Reverse index — useful for impact analysis ("if I edit this skill, which
-playbooks will change?"). The `general-output-style` skill is
-auto-included by every operational playbook that is not General or
-Default — too many to list, so it's noted separately.
+Reverse index of section 5.3, for impact analysis ("if I edit this skill, which agents
+change?"). One row per shipped skill, in the order of [section 3.5.3](#353-the-53-default-skills).
+The count is the number of agent templates whose `includes_skills` names the skill;
+*(preview)* marks an agent template in preview. 2 skills are declared by no agent template:
+`general-output-style`, which the runtime adds itself, and `servicenow-tisc-enrichment`.
 
-| Skill | Playbooks that include it |
-|---|---|
-| `general-output-style` | *(auto-included by every operational playbook except General and Default — 48 playbooks total, incl. Data Source Onboarding (full) in 1.5.0-dev)* |
-| `spl-perf-priorities` | Build a SPL search • Improve an existing SPL • Build / improve an alert • Build / improve a report • Data correlation helper • all AI Toolkit creation playbooks with custom SPL (single, multi, forecast, cluster, prediction, ALERT, ONNX, SageMaker, `ai`) • Data troubleshooting helper • Investigation • ES — Triage a notable • ES — Investigate a user / host / IOC / Phishing / Lateral / Coverage gap • ES — Tune a noisy correlation search • ITSI — Diagnose / Root-cause / Health timeline / KPI threshold review |
-| `spl-validation-loop` | Build a SPL search • Improve an existing SPL • Build / improve an alert • Build / improve a field extraction • Data correlation helper • Data enrichment helper • all AI Toolkit creation playbooks (except `ai` command) • Audit & refresh an existing ML use case • Data troubleshooting helper • Investigation • ES — Triage a notable • ES — Investigate a user / host / IOC / Phishing / Lateral / Coverage gap • ITSI — Diagnose / Root-cause / Health timeline / KPI threshold review |
-| `dashboard-xml-discipline` | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit creation playbooks with companion dashboard • Investigation |
-| `dashboard-xml-validation-loop` | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • all AI Toolkit creation playbooks with companion dashboard • Audit & refresh an existing ML use case • Investigation |
-| `dashboard-studio-versioning` | Build a Dashboard Studio JSON dashboard (draft) |
-| `dashboard-proof-required` | Build / improve an alert • AI Toolkit – Smart outlier / Multi-field / Forecasting / Clustering / Prediction / Outlier ALERT / ONNX / SageMaker • Investigation |
-| `viz-best-fit` | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard • Data visualization helper • Build / improve an alert (via dashboard) • all AI Toolkit creation playbooks with companion dashboard • Investigation |
-| `alert-companion-dashboard` | Build / improve an alert • AI Toolkit – Outlier ALERT + diagnostic dashboard |
-| `ml-aiworkbench-naming-and-share` | All AI Toolkit creation playbooks (single, multi, forecast, cluster, prediction, Outlier ALERT, ONNX, SageMaker, `ai` command) • Audit & refresh an existing ML use case |
-| `ml-data-readiness-precheck` | AI Toolkit – Smart outlier / Multi-field / Forecasting / Clustering / Prediction / Outlier ALERT • AI Toolkit – Stats vs ML decision helper |
-| `ml-self-correct-budget` | All AI Toolkit creation playbooks • Audit & refresh an existing ML use case |
-| `feed-health-verdict` | Data onboarding helper • Data troubleshooting helper • Investigation • Build / improve an alert • all 9 ES playbooks • all 7 ITSI playbooks (except Impact analysis) • all 6 TrackMe playbooks |
-| `metric-vs-event-index-aware` | Build a SPL search • Improve an existing SPL • Data correlation helper • Data troubleshooting helper • Investigation • TrackMe — Empty-result investigator |
-| `read-only-by-default-soc` | All 9 ES playbooks • TrackMe — ES detection data-readiness check • ATT&CK Tactic Hunt *(ES-gated — drops gracefully without ES)* |
-| `read-only-by-default-itops` | All 7 ITSI playbooks • TrackMe — ITSI KPI root-cause assistant |
-| `data-vs-service-distinction` | ITSI — Diagnose / Root-cause / Service health timeline / KPI threshold review / Episode triage queue summary • TrackMe — Empty-result investigator / ITSI KPI root-cause assistant / Event-count anomaly deep dive • Investigation |
-| `naming-collision-handling` | Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard • Build / improve an alert • all AI Toolkit creation playbooks • Audit & refresh an existing ML use case • ATT&CK Tactic Hunt • Data Source Onboarding (full) |
-| `consult-security-knowledge-first` | All 9 ES playbooks • ATT&CK Tactic Hunt |
-| `cdtsm-discipline` | AI Toolkit – CDTSM Smart Forecasting / Anomaly Detection / Predictive Alerting |
-| `hunt-evidence-honesty` | ATT&CK Tactic Hunt *(reusable by any hunt / coverage / detection-dashboard playbook)* |
-| `demo-dataset-time-reanchor` | ATT&CK Tactic Hunt *(reusable by any playbook that sets a time range over a fixed-window demo / training / CTF dataset)* |
-| `conf-package-discipline` *(1.5.0-dev)* | Data Source Onboarding (full) *(reusable by any playbook that generates onboarding config and delivers a deployable package)* |
-| `data-onboarding-readiness` *(1.5.0-dev)* | Data Source Onboarding (full) • Data onboarding helper *(reusable by any playbook that builds time-based artifacts on a sourcetype, or any data-onboarding / data-quality playbook)* |
-| `magic-8-compliance` *(1.5.0-dev)* | Data Source Onboarding (full) *(reusable by any playbook that generates or audits onboarding config and wants it validated against the real `.conf.spec` + scored before handover)* |
-| `cribl-field-discovery` *(1.7.0)* | Cribl Stream → Splunk data-quality check *(reusable by any onboarding playbook scoping the Cribl monitoring index by pipeline/source)* |
-| `edge-processor-discovery` *(1.8.2)* | Edge Processor → Splunk data-quality check *(reusable by any onboarding playbook scoping the EP metrics index; whole-instance/dataset unless a customer SPL2 stamp exists)* |
+| Skill | Count | Agent templates that include it |
+|---|---|---|
+| `general-output-style` | 0 | none; the runtime adds it to every agent except General and Default |
+| `spl-perf-priorities` | 39 (27 ready, 12 in preview) | Build a SPL search • Improve an existing SPL • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Build / improve an alert • Build / improve a report • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) • Data troubleshooting helper • Investigation • ES — Triage a notable *(preview)* • ES — Investigate a user *(preview)* • ES — Investigate a host *(preview)* • ES — Investigate an IOC *(preview)* • ES — Phishing email triage *(preview)* • ES — Lateral movement check *(preview)* • ES — Detection coverage gap analysis *(preview)* • ES — Tune a noisy correlation search *(preview)* • ITSI — Diagnose service degradation *(preview)* • ITSI — Root-cause an episode • ITSI — Service health timeline *(preview)* • ITSI — KPI threshold review *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Rule Builder • Behavioral Profile Builder |
+| `spl-validation-loop` | 39 (28 ready, 11 in preview) | Build a SPL search • Improve an existing SPL • Build / improve an alert • Build / improve a field extraction • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • Data enrichment helper • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Stats vs ML decision helper • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • Audit & refresh an existing ML use case • Data troubleshooting helper • Investigation • ES — Triage a notable *(preview)* • ES — Investigate a user *(preview)* • ES — Investigate a host *(preview)* • ES — Investigate an IOC *(preview)* • ES — Phishing email triage *(preview)* • ES — Lateral movement check *(preview)* • ES — Detection coverage gap analysis *(preview)* • ITSI — Diagnose service degradation *(preview)* • ITSI — Root-cause an episode • ITSI — Service health timeline *(preview)* • ITSI — KPI threshold review *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Rule Builder • Fraud Ring Mapper • Behavioral Profile Builder • Fraud Command Center *(preview)* |
+| `dashboard-xml-discipline` | 22 (21 ready, 1 in preview) | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) • Investigation • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* |
+| `dashboard-xml-validation-loop` | 23 (22 ready, 1 in preview) | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build / improve an alert • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) • Audit & refresh an existing ML use case • Investigation • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* |
+| `dashboard-studio-versioning` preview (administrators only) | 1 (in preview) | Build a Dashboard Studio JSON dashboard *(preview)* |
+| `dashboard-proof-required` | 16 (15 ready, 1 in preview) | Build / improve an alert • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • Investigation • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Command Center *(preview)* |
+| `viz-best-fit` | 17 (16 ready, 1 in preview) | Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Data visualization helper • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • Investigation • ATT&CK Tactic Hunt — Technique Coverage Dashboard |
+| `alert-companion-dashboard` | 3 | Build / improve an alert • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Outlier ALERT + diagnostic dashboard |
+| `ml-aiworkbench-naming-and-share` | 10 | AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) • Audit & refresh an existing ML use case |
+| `ml-data-readiness-precheck` | 7 | AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Stats vs ML decision helper |
+| `ml-self-correct-budget` | 9 | AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • Audit & refresh an existing ML use case |
+| `feed-health-verdict` | 41 (19 ready, 22 in preview) | Build / improve an alert • Data onboarding helper • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • Data troubleshooting helper • Investigation • ES — Triage a notable *(preview)* • ES — Investigate a user *(preview)* • ES — Investigate a host *(preview)* • ES — Investigate an IOC *(preview)* • ES — Phishing email triage *(preview)* • ES — Lateral movement check *(preview)* • ES — Detection coverage gap analysis *(preview)* • ES — Daily SOC handoff summary *(preview)* • ES — Tune a noisy correlation search *(preview)* • ITSI — Automatic Root Cause Analysis • ITSI — Diagnose service degradation *(preview)* • ITSI — Root-cause an episode • ITSI — Service health timeline *(preview)* • ITSI — KPI threshold review *(preview)* • ITSI — Impact analysis *(preview)* • ITSI — Episode triage queue summary *(preview)* • ITSI — Entity health check *(preview)* • TrackMe — Morning data-health check *(preview)* • TrackMe — Empty-result investigator *(preview)* • TrackMe — ITSI KPI root-cause assistant *(preview)* • TrackMe — ES detection data-readiness check *(preview)* • TrackMe — Event-count anomaly deep dive *(preview)* • TrackMe — Onboard a new data source *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder • Fraud Command Center *(preview)* |
+| `metric-vs-event-index-aware` | 10 (9 ready, 1 in preview) | Build a SPL search • Improve an existing SPL • Explain a SPL search • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Data correlation helper • Data troubleshooting helper • Investigation • TrackMe — Empty-result investigator *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard |
+| `read-only-by-default-soc` | 11 (1 ready, 10 in preview) | ES — Triage a notable *(preview)* • ES — Investigate a user *(preview)* • ES — Investigate a host *(preview)* • ES — Investigate an IOC *(preview)* • ES — Phishing email triage *(preview)* • ES — Lateral movement check *(preview)* • ES — Detection coverage gap analysis *(preview)* • ES — Daily SOC handoff summary *(preview)* • ES — Tune a noisy correlation search *(preview)* • TrackMe — ES detection data-readiness check *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard |
+| `read-only-by-default-itops` | 9 (2 ready, 7 in preview) | ITSI — Automatic Root Cause Analysis • ITSI — Diagnose service degradation *(preview)* • ITSI — Root-cause an episode • ITSI — Service health timeline *(preview)* • ITSI — KPI threshold review *(preview)* • ITSI — Impact analysis *(preview)* • ITSI — Episode triage queue summary *(preview)* • ITSI — Entity health check *(preview)* • TrackMe — ITSI KPI root-cause assistant *(preview)* |
+| `data-vs-service-distinction` | 11 (3 ready, 8 in preview) | Investigation • ITSI — Automatic Root Cause Analysis • ITSI — Diagnose service degradation *(preview)* • ITSI — Root-cause an episode • ITSI — Service health timeline *(preview)* • ITSI — KPI threshold review *(preview)* • ITSI — Impact analysis *(preview)* • ITSI — Episode triage queue summary *(preview)* • TrackMe — Empty-result investigator *(preview)* • TrackMe — ITSI KPI root-cause assistant *(preview)* • TrackMe — Event-count anomaly deep dive *(preview)* |
+| `naming-collision-handling` | 23 (22 ready, 1 in preview) | Build a SPL search • Improve an existing SPL • Explain a SPL search • Build a Simple XML dashboard • Improve a Simple XML dashboard • Build a Dashboard Studio JSON dashboard *(preview)* • Build / improve an alert • Data Source Onboarding (full) • AI Toolkit – Smart outlier detection (single metric) • AI Toolkit – Multi-field anomaly detection • AI Toolkit – Smart forecasting • AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting • AI Toolkit – Smart clustering • AI Toolkit – Smart prediction (categorical or numeric) • AI Toolkit – Outlier ALERT + diagnostic dashboard • AI Toolkit – Bring your own ONNX model (score in Splunk) • AI Toolkit – Score against an AWS SageMaker endpoint • AI Toolkit – Ask an external LLM about your Splunk data (`ai` command) • Audit & refresh an existing ML use case • Create your own agent • ATT&CK Tactic Hunt — Technique Coverage Dashboard |
+| `template-authoring-discipline` | 2 | Create your own agent • Update your own agent |
+| `prompt-injection-defense-on-authored-content` | 2 | Create your own agent • Update your own agent |
+| `consult-security-knowledge-first` | 20 (10 ready, 10 in preview) | Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • ES — Triage a notable *(preview)* • ES — Investigate a user *(preview)* • ES — Investigate a host *(preview)* • ES — Investigate an IOC *(preview)* • ES — Phishing email triage *(preview)* • ES — Lateral movement check *(preview)* • ES — Detection coverage gap analysis *(preview)* • ES — Daily SOC handoff summary *(preview)* • ES — Tune a noisy correlation search *(preview)* • TrackMe — ES detection data-readiness check *(preview)* • ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder |
+| `cdtsm-discipline` | 3 | AI Toolkit – CDTSM Smart Forecasting • AI Toolkit – CDTSM Anomaly Detection • AI Toolkit – CDTSM Predictive Alerting |
+| `hunt-evidence-honesty` | 8 (7 ready, 1 in preview) | ATT&CK Tactic Hunt — Technique Coverage Dashboard • Fraud Data Coverage Audit • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Behavioral Profile Builder • Fraud Command Center *(preview)* |
+| `demo-dataset-time-reanchor` | 1 | ATT&CK Tactic Hunt — Technique Coverage Dashboard |
+| `conf-package-discipline` | 1 | Data Source Onboarding (full) |
+| `data-onboarding-readiness` | 8 | Data onboarding helper • CIM Coverage Audit • Data Source Onboarding (full) • Cribl Stream → Splunk data-quality check • Edge Processor → Splunk data-quality check • Investigation • Fraud Data Coverage Audit • Fraud Alert Triage |
+| `magic-8-compliance` | 2 | CIM Coverage Audit • Data Source Onboarding (full) |
+| `cribl-field-discovery` | 1 | Cribl Stream → Splunk data-quality check |
+| `edge-processor-discovery` | 1 | Edge Processor → Splunk data-quality check |
+| `spl-review-conduct` | 1 | Improve an existing SPL |
+| `spl-review-correctness` | 1 | Improve an existing SPL |
+| `spl-review-rewrites` | 1 | Improve an existing SPL |
+| `spl-review-evidence` | 1 | Improve an existing SPL |
+| `dashboard-ingestion-health` | 3 | Build a Simple XML dashboard • Improve a Simple XML dashboard • Investigation |
+| `cim-coverage-audit` | 1 | CIM Coverage Audit |
+| `servicenow-structured-discipline` | 14 | ServiceNow CMDB Lookup & Enrichment • ServiceNow Incident / Event Raise • ServiceNow Incident from Splunk Alert • ServiceNow Incident from ITSI Episode • ServiceNow Incident from ES Notable • ServiceNow Closed-Incident: Create New • ServiceNow Closed-Incident: Reopen • ServiceNow Closed-Incident: Suppress • Security Incident from ES Notable • Security Incident from Splunk Alert • Security Incident from ITSI Episode • Security Closed-Incident: Create New • Security Closed-Incident: Reopen • Security Closed-Incident: Suppress |
+| `servicenow-incident-description-authoring` | 13 | ServiceNow Incident / Event Raise • ServiceNow Incident from Splunk Alert • ServiceNow Incident from ITSI Episode • ServiceNow Incident from ES Notable • ServiceNow Closed-Incident: Create New • ServiceNow Closed-Incident: Reopen • ServiceNow Closed-Incident: Suppress • Security Incident from ES Notable • Security Incident from Splunk Alert • Security Incident from ITSI Episode • Security Closed-Incident: Create New • Security Closed-Incident: Reopen • Security Closed-Incident: Suppress |
+| `servicenow-tisc-enrichment` | 0 | none |
+| `kpi-data-lineage` | 1 (ready) | ITSI — Automatic Root Cause Analysis |
+| `monitoring-self-health` | 1 (ready) | ITSI — Automatic Root Cause Analysis |
+| `rca-probable-cause-language` | 1 (ready) | ITSI — Automatic Root Cause Analysis |
+| `fraud-entity-resolution` | 7 (6 ready, 1 in preview) | Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Benefits and Claims Triage • Fraud Command Center *(preview)* |
+| `dashboard-ir-authoring` | 2 | Improve an existing SPL • Fraud Rule Builder |
+| `fraud-dashboard-structure` | 4 (3 ready, 1 in preview) | Fraud Data Coverage Audit • Fraud Rule Builder • Fraud Ring Mapper • Fraud Command Center *(preview)* |
+| `fraud-risk-scoring-discipline` | 4 (3 ready, 1 in preview) | Fraud Rule Builder • Fraud Alert Triage • Fraud Notable Triage (Enterprise Security) • Fraud Command Center *(preview)* |
+| `detection-scope-fidelity` | 1 | Fraud Rule Builder |
+| `spl-stage-sampling` | 1 | Explain a SPL search |
+| `spl-behaviour-vs-data` | 1 | Explain a SPL search |
+| `explain-dashboard-layout` | 1 | Explain a SPL search |
+| `explain-dashboard-style` | 1 | Explain a SPL search |
+| `spl-cim-model-gaps` | 1 | Explain a SPL search |
+| `spl-inline-comment-rules` | 1 | Explain a SPL search |
+| `spl-intent-coverage` | 1 | Build a SPL search |
 
 ---
 
 ## 6. What ships, in numbers
 
-Counted from the shipped seed files and tool definitions on 2026-09-22, for app
-version 2.5.9.
+Counted from the shipped seed files and tool definitions on 2026-10-22, for app
+version 2.7.0. The tool counts are checked automatically against the shipped
+tool definitions; the rest are counted by hand on each release.
 
 | Surface | Count |
 |---|--:|
-| Playbooks | **90** |
-| &nbsp;&nbsp;↳ operational | 65 |
-| &nbsp;&nbsp;↳ draft | 25 |
-| Built-in tools | **182** |
+| Agent templates | **90** |
+| &nbsp;&nbsp;↳ ready (`operational`) | 67 |
+| &nbsp;&nbsp;↳ in preview (`draft`) | 23 |
+| Built-in tools | **196** |
 | &nbsp;&nbsp;↳ ServiceNow tools | 17 |
-| Skills | **52** |
-| &nbsp;&nbsp;↳ operational | 51 |
+| &nbsp;&nbsp;↳ network-policy tools | 13 |
+| Runner-side tools (not counted above) | **2** |
+| Skills | **53** |
+| &nbsp;&nbsp;↳ operational | 52 |
 | &nbsp;&nbsp;↳ draft | 1 |
-| Playbook categories | 25 |
+| Agent template categories | 25 |
 | Skill categories | 15 |
 | Knowledge connectors | 8 |
 | Static-library trigger rules | 20 |
 | Curated knowledge entries | 24 |
 
-**Draft playbooks are not offered to end users.** They appear only to
-administrators, in the Playbooks tab. A user sees the operational set, minus
+**Agent templates in preview are not offered to end users.** They appear only to
+administrators, in the **Agents** tab. A user sees the operational set, minus
 anything their licence or their Org's tool assignments exclude.

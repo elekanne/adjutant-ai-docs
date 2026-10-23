@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" width="800" height="560" role="img" aria-labelledby="t d">
-  <title id="t">How skills, playbooks and tools become one prompt</title>
-  <desc id="d">The guardrail sits above three layers. Skills hold reusable prose, the playbook holds the workflow and names which skills it includes, and tools are the functions the model may call. Skills and the playbook body are concatenated into the assembled prompt; the model then calls tools while it works.</desc>
+  <title id="t">How skills, agents and tools become one prompt</title>
+  <desc id="d">The guardrail sits above three layers. Skills hold reusable prose, the agent holds the workflow and names which skills it includes, and tools are the functions the model may call. Skills and the agent's prompt are concatenated into the assembled prompt; the model then calls tools while it works.</desc>
 
   <style>
     .lbl  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -42,7 +42,7 @@
   <text class="dim" x="44" y="292">Refreshed from the seed.</text>
 
   <rect class="reg" x="286" y="108" width="228" height="196" rx="4"/>
-  <text class="hd"  x="302" y="132">Playbook</text>
+  <text class="hd"  x="302" y="132">Agent</text>
   <text class="dim" x="302" y="154">The workflow for one task.</text>
   <text class="lbl" x="302" y="178">Phases and form inputs</text>
   <text class="lbl" x="302" y="200">Required apps and roles</text>
@@ -57,17 +57,17 @@
   <text class="lbl" x="560" y="178">Run a search</text>
   <text class="lbl" x="560" y="200">Create a dashboard or alert</text>
   <text class="lbl" x="560" y="222">Read ES, ITSI, ServiceNow</text>
-  <text class="dim" x="560" y="252">182 built in, plus your own</text>
+  <text class="dim" x="560" y="252">196 built in, plus your own</text>
   <text class="dim" x="560" y="272">HTTP tools and any imported</text>
   <text class="dim" x="560" y="292">from an MCP server.</text>
 
-  <!-- playbook pulls skills -->
+  <!-- agent pulls skills -->
   <path class="ln" d="M286 206 L256 206" marker-end="url(#a)"/>
 
   <!-- into the prompt -->
   <path class="ln" d="M142 304 L142 344 L360 344 L360 366" marker-end="url(#a)"/>
   <path class="ln" d="M400 304 L400 366" marker-end="url(#a)"/>
-  <text class="edge" x="152" y="330">resolved when the playbook is fetched</text>
+  <text class="edge" x="152" y="330">resolved when the agent is fetched</text>
 
   <!-- tools called later -->
   <path class="ln" d="M658 304 L658 452 L604 452" marker-end="url(#a)"/>
@@ -79,6 +79,6 @@
   <text class="dim" x="140" y="416">what the model finally reads</text>
   <text class="lbl" x="140" y="444">1 · the guardrail</text>
   <text class="lbl" x="140" y="468">2 · every included skill, in order</text>
-  <text class="lbl" x="140" y="492">3 · the playbook body and your question</text>
+  <text class="lbl" x="140" y="492">3 · the agent's prompt and your question</text>
   <text class="dim" x="140" y="518">The model then calls tools to do the work.</text>
 </svg>

@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # User manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 2.5.9
-**Last updated:** 2026-09-22
+**App version:** 2.7.0
+**Last updated:** 2026-10-12
 **Audience:** end users — anyone who does **not** hold `admin`,
 `splunk_admin` or `sc_admin` on the search head. If you hold any of those
 three, see [the admin manual](../admin/admin-manual.md) instead: you get extra tabs and
@@ -20,34 +20,36 @@ controls on top of everything below.
 
 > **About this app — read first.** Adjutant AI is a *host shell*: a
 > single-page React app that has **no use-cases of its own**. Every
-> piece of functionality it offers — which playbooks appear, which
+> piece of functionality it offers (which governed agents appear, which
 > LLMs are reachable, which tools the LLM may call, where saved
-> searches / dashboards / alerts land — is fully derived from
+> searches / dashboards / alerts land) is fully derived from
 > **(a) the Splunk app you opened it from** and **(b) the Splunk
 > roles you hold**. You should reach the assistant from within
 > Search / ITSI / Enterprise Security / your team's custom apps via a
 > nav-menu entry — you should **not** click the
 > `itmip_ai_splunk_assistent_app` tile on the Splunk launcher
-> directly. The whole point of the Workbench is to deliver an AI
-> assistant *inside the apps you already work in*, with everything it
+> directly. The whole point of the Workbench is to deliver governed
+> agents *inside the apps you already work in*, with everything they
 > creates landing in those apps' namespaces. See
 > [the installation guide, Deployment model](../admin/installation.md)
 > for the full rationale.
 
 > **A note on what you can see (license tiers).** Depending on the
-> active license tier, some tabs and playbooks may appear **greyed out
+> active license tier, some tabs and agents may appear **greyed out
 > with a 🔒 padlock and a short upsell message** instead of being
-> usable. A locked playbook tile is greyed, refuses the click, and carries a
+> usable. A locked agent tile is greyed, refuses the click, and carries a
 > **`🔒 Pro`** or **`🔒 Enterprise`** badge; hovering it tells you exactly which
 > entitlement is missing.
 >
-> As a rough guide: machine-learning and data-onboarding playbooks need
-> **Professional** or higher; security / Enterprise Security / ITSI playbooks
+> As a rough guide: machine-learning and data-onboarding agents need
+> **Professional** or higher; security / Enterprise Security / ITSI agents
+> and integrations (reconciliation, integration flows, scheduled integrations)
 > need **Enterprise**; and **History** needs **Professional**. Some features
 > need a **named add-on** on top of the edition — you may see messages naming
-> `itsi-rca`, `fraud-analytics`, `socplaybooks`, `opsrunbooks`, `servicenow` or
-> `ai-integration`. Those are purchased separately; having Enterprise alone is
-> not enough for them.
+> `itsi-rca`, `fraud-analytics`, `socplaybooks`, `opsrunbooks` or `servicenow`.
+> Those are purchased separately; having Enterprise alone is not enough for them.
+> (`socplaybooks` unlocks the SOC and security agent templates; the licence
+> feature keeps its original name.)
 >
 > This is normal — it just means that feature isn't in your current plan.
 > **Nothing you have created is ever deleted** if a licence changes or expires;
@@ -120,7 +122,7 @@ the common case; see the section above on where the app runs).
 The header shows:
 
 ```
-Adjutant AI   [License badge if any]   v2.5.9
+Adjutant AI   [License badge if any]   v2.7.0
 App: <your-current-app>  •  User: <you>  •  Org: <ORG>  •  BU: <BU>
 ```
 
@@ -134,9 +136,9 @@ username — if you don't, you are on the user experience this manual describes.
   License` / `Running on a Proof of Value MSP License` for trials; and
   `Not-for-Resale License` for NFR. An expired or mis-activated paid licence
   reads `Running on free License` until it is re-activated.
-- **Org / BU** — your tenant assignment. Admins decide which Org and
+- **Org / BU**: the Org and BU you are assigned to. Admins decide which Org and
   BU you fall into based on your Splunk role(s) and the app you're
-  currently in. The Org/BU affects which playbooks and LLMs you see.
+  currently in. The Org/BU affects which agents and LLMs you see.
 
 ## Tabs you can use
 
@@ -144,7 +146,7 @@ You get **four**:
 
 | Tab | Purpose |
 |-----|---------|
-| **Ask** | The main workspace. Ask a question; the assistant responds with SPL / dashboards / created objects. |
+| **Console** | The main workspace. Run an agent or type a request; the assistant responds with SPL / dashboards / created objects. |
 | **History** | Replay and re-ask previous questions. Always present, but **greyed out on the Personal (free) tier** — hovering says *"Available with a Professional+ license"*. |
 | **Settings** | See the AI connections available to you, check their status, and choose a colour theme. (**Read-only** as far as creating connections goes — see [The Settings tab](#the-settings-tab).) |
 | **Help** | About / version / licence tier, and **🐞 Report an issue**. |
@@ -153,18 +155,20 @@ You get **four**:
 when the rest of the app is greyed out — which is exactly when you need to
 report a problem.
 
-Tabs you **won't** see, because they are admin-only: Playbooks, Skills,
-Knowledge, **Input Sources**, **Scheduled Ask**, Tokens & Costs, Orgs & BUs,
+Tabs you **won't** see, because they are admin-only: Agents, Skills,
+Knowledge, **Unattended** (which includes integrations, mappings and input
+sources), Tokens & Costs, Orgs & BUs,
 Tools, **Models**, Audit, License, Backups.
 
-> Don't worry about the admin tabs. Everything they configure — which playbooks
+> Don't worry about the admin tabs. Everything they configure (which agents
 > you get, which AI connections you can use, what the assistant is allowed to
-> do — shows up for you inside **Ask**.
+> do) shows up for you inside the **Console**.
 
 ### Dashboards in the app's left-hand nav
 
-Separately from the tabs above, your admin may point you at Splunk dashboards
-this app ships. Most are readable by any user:
+Separately from the tabs above, the app ships Splunk dashboards in its
+left-hand nav. They are operator views and are visible to administrators only
+(`admin`, `sc_admin`, `splunk_admin`); other users do not see them in the nav:
 
 | Dashboard | Shows |
 |---|---|
@@ -175,40 +179,41 @@ this app ships. Most are readable by any user:
 | **Adjutant AI — Resource Consumption** | What the app is costing in resources. |
 | **Adjutant AI — Pipeline Knobs** | The tuning settings currently in effect. |
 
-Three more — **Outcome Ledger**, **Behaviour (OCSF)** and **Fraud Data
-Readiness** — are restricted to admins.
+**Outcome Ledger**, **Behaviour (OCSF)** and **Fraud Data Readiness** are
+admin-only as well.
 
-## The Ask tab
+## The Console tab
 
 This is the main workspace. The flow is:
 
-1. (Optional) Click a **Use-case playbook** tile — these are
-   pre-tuned prompts for common tasks ("Build a SPL search",
+1. (Optional) Click a tile in the **Agents** card. Each tile is
+   an agent: a pre-tuned prompt for a common task ("Build a SPL search",
    "Improve an existing SPL", "Build a Simple XML dashboard", "AI
-   Toolkit — Smart outlier detection", "ATT&CK Tactic Hunt —
+   Toolkit – Smart outlier detection (single metric)", "ATT&CK Tactic Hunt —
    Technique Coverage Dashboard" (only appears when Splunk Security
-   Essentials is installed), and **90 in total**). If you don't pick one,
-   the app uses the `Default` router which figures out the right
-   playbook for you.
+   Essentials is installed), and more; which ones you see depends on your
+   Org/BU and roles). If you don't pick one,
+   the router picks the right agent for you.
 
-   **Finding one among 90** — the picker has a search box
-   (*"Search 90 playbooks…"*), a **Filter by tag…** box and a **Filter by
+   **Finding one**: the card has a search box
+   (*"Search N agents…"*, where N is the number of agents you can see), a
+   **Filter by tag…** box and a **Filter by
    category…** box, a **Clear** button and a live *"N matches"* counter. The
-   tag and category suggestions only offer values that exist in playbooks
+   tag and category suggestions only offer values that exist in agents
    *you* can see.
 
    Click the selected tile again to deselect it. Collapse the whole card with
    the **▸ / ▾** chevron in its heading; when collapsed it shows a
-   *"Playbook active: &lt;name&gt;"* pill with an **×** to clear it.
+   *"Agent active: &lt;name&gt;"* pill with an **×** to clear it.
 
-   > **Playbooks apply to the first message of a thread only.** Once you are
+   > **An agent applies to the first message of a thread only.** Once you are
    > in a conversation, the other tiles are disabled — hovering says so. Click
-   > **Clear** to start a new thread if you want a different playbook.
+   > **Clear** to start a new thread if you want a different agent.
    >
-   > If a playbook carries a ready-made question form, picking it asks
-   > *"Replace the current text in 'Your question' with the template's form?"*
+   > If an agent carries a ready-made question form, picking it asks
+   > *"Replace the current text in 'Your request' with the template's form?"*
    > — say no to keep what you have typed.
-2. Type your question in the **Your question** box. Be specific:
+2. Type your request in the **Your request** box. Be specific:
    include the index you care about, the time range, the field
    name(s), and what "good" looks like.
 3. (Optional) **Attach references & samples** — the card is titled that —
@@ -220,7 +225,7 @@ This is the main workspace. The flow is:
    - Dashboard view
    - AI Toolkit model (only shown if Splunk_ML_Toolkit is installed
      and visible to you)
-   - **A sample file from your computer** (1.5.0-dev) — pick a local
+   - **A sample file from your computer**: pick a local
      text file (a `.log`, `.txt`, `.csv`, `.json`, `.conf`, …) and its
      contents are read **in your browser** and sent along as **data to
      analyse**. This is perfect for **onboarding a brand-new source**:
@@ -233,52 +238,41 @@ This is the main workspace. The flow is:
        trimmed to a sample.
      - The contents are clearly labelled to the assistant as *data, not
        instructions*, so text inside the file can't hijack the request.
-4. Choose the **LLM** to use from the dropdown (top right of the Ask
+4. Choose the **LLM** to use from the dropdown (top right of the Console
    panel). Your admin has provisioned at least one. You can use the
    built-in **`DFLT_DFLT_anthropic_central`** as long as the admin
    has stored the central Anthropic key on the SH.
 5. Choose the **Model** — the dropdown shows the price per million
    tokens and a speed hint (⚡ fast, • balanced, 🐢 careful).
-6. Click **Ask** (or press `⌘/Ctrl + Enter`).
+6. Decide on **Also build a proof dashboard** — *"A dashboard that shows the
+   result works. Adds time to the Ask."* With the switch off, the assistant
+   builds what you asked for (a saved search, an alert, a model, an
+   investigation summary) and no extra dashboard, and it does not ask you
+   about one. Switch it on and it also builds a dashboard that proves the
+   result. The switch appears only where it can change something: when no
+   agent is selected, and for agents with an optional proof-dashboard
+   step. It is hidden for agents that build no dashboard (such as
+   **Build a SPL search**) and for agents whose dashboard is the result
+   you asked for (the dashboard-building agents, ATT&CK Tactic Hunt,
+   Fraud Data Coverage Audit and Fraud Command Center); there the request runs
+   without a proof dashboard. Where it appears it is off unless the agent
+   starts it on: the AI Toolkit model builds, Build / improve an alert, the
+   two data-quality checks, Investigation and Fraud Ring Mapper start it
+   on. You can change it before you send and between turns. If you ask for
+   a dashboard in your own words, you get one whatever the switch says.
+7. Click **Run** (or press `⌘/Ctrl + Enter`).
 
    If the button reads **`Configure LLM first`**, no AI connection is usable
    yet — that is one for your admin.
 
-While the assistant works, you'll see:
+While the assistant works, the **Tool calls** panel under your question shows
+what it is doing, step by step, and lets you stop it. See
+[The Tool calls panel](#the-tool-calls-panel).
 
-- A spinner reading **"&lt;Provider&gt; is working…"**.
-- A live step line telling you what is happening right now: *"Sending your
-  message to …"*, *"LLM is reasoning…"*, *"Running tool: &lt;name&gt;…"*,
-  *"Tool &lt;name&gt; finished — LLM is thinking about the result…"*, or
-  *"Tool &lt;name&gt; failed — LLM is deciding what to do next…"*, plus
-  *"N tool calls so far in this turn"*.
-- A **Session** pill. Before you ask anything it reads `Session: 0 tokens`;
-  once running it shows the real figures —
-  `Session: 12K in · 3.4K out · ≈ $0.0421 · 1m 20s`.
-
-### After the first question: the thread
-
-Once you submit, the page changes shape and it is worth knowing why:
-
-- **Your question becomes read-only.** It is the anchor of the thread, so it
-  is frozen rather than editable.
-- **A separate `Your reply` card appears.** Continue the conversation there;
-  the button now reads **`Send reply`**.
-- **The attachments card disappears.** References are attached on the first
-  message of a thread.
-- **`Clear` now means "end this thread and start over"** — it is how you get
-  back to a blank question with a different playbook.
-- A **🐞 Report issue** button appears on the reply card.
-
-### You can walk away — it will tell you when it's done
-
-Long answers don't need babysitting:
-
-- Switch to another tab and the **Ask tab pulses with a dot** when the answer
-  lands.
-- Click away to another window and the **browser tab title flashes 🔔**.
-- If you allowed notifications (you're asked the first time you click **Ask**),
-  you get a **desktop notification**.
+In the question box, next to the model choice, a **Session** pill shows what the
+session has used so far.
+Before you ask anything it reads `Session: 0 tokens`; once running it shows the
+real figures, for example `Session: 12K in · 3.4K out · ≈ $0.0421 · 1m 20s`.
 
 ### Reading the answer
 
@@ -292,9 +286,171 @@ The response block gives you more than prose:
 - **Validation pills** — `Validation: OK` or `Validation: N errors`, plus
   `N searches passed` / `N skipped`.
 - **Reasoning** — open by default, streaming as it is written.
-- **Tool calls (N)** — collapsed; expand to see exactly what was run.
+- **Tool calls**: every step the assistant took for this question. See
+  [The Tool calls panel](#the-tool-calls-panel).
 - **Copy** on any code block, and **Run ad-hoc** on SPL to execute it straight
   away in Splunk.
+
+### The Tool calls panel
+
+Every question you send gets its own **TOOL CALLS** panel. It shows each step the
+assistant takes for that question: each Splunk search, each lookup, each model round,
+in the order they happen, with how long each took. Everyone sees it; there is no
+setting to turn it off. The panels last while the Console tab is open: **Clear** empties
+them, and a question reopened from History does not bring its panel back.
+
+**The header** reads `TOOL CALLS`, followed by `Running` while the question runs, the
+time so far, the number of steps (model rounds included) and, when it applies,
+`1 needs attention` or `N need attention`. Click the header to open or close the
+list; after you do, the panel keeps your choice.
+
+**The headline** under the header is one sentence that says where things stand:
+
+- While it runs: `Now:` followed by the current step and its purpose, and the step's
+  live line. For example: *Now: Splunk search main, last 24 h: stats count by host.
+  1,284 events found · 4.1 million scanned · 37% done.* Before the first step it
+  reads `Starting.`
+- When it is done, one of:
+  - *Took 48 s. Most of it (41 s) was one Splunk search (…).*, when one step took at
+    least half the time;
+  - *Took 12 s, 5 steps.*;
+  - *Answered without tools in 3.2 s.*;
+  - *Took 30 s. 1 item needs attention: …*, naming the step and what is wrong;
+  - *Cancelled after 1 min 5 s.*, when you pressed **Stop**;
+  - *Stopped after 20 s: …*, when the question ended with an error.
+
+While the question runs, the list stays open. When it is done, the list closes to the
+headline and a time strip, unless a step needs attention; then it stays open. The strip
+says where the time went: *Waiting for user* (a write waiting for your approval), *Splunk*,
+*Other tools*, *Model*, *Network and proxy*, *Adjutant* and *Unaccounted*. Every moment counts
+once, so the parts add up to the whole; when steps ran at the same time the strip says
+*parallel steps counted once*. A second or more that no step accounts for (10% of the time or
+more) is noted under the strip as *… not attributed*.
+
+**The steps.** Each row shows a plain name (*Splunk search*, *Run saved search*,
+*List indexes*, *Save search*, *Create alert*, *Dashboard builder*, *Model*, and so
+on), what the step is for (built from what it actually did, for example the index,
+the time range and the command of a search, or *Added panel: Errors by host* for the
+dashboard builder), and its duration. Hover a row to see the tool's technical name.
+Model rounds read *Planned the next step*, *Read the tool results* or *Wrote the
+answer*.
+
+A running step also shows a **live line**, updated every second or two:
+
+| Live line | Meaning |
+|---|---|
+| *Sending search* | The search is being sent to Splunk. |
+| *Waiting for a free search slot (…)* | Your searches are at their limit; this one waits its turn. |
+| *Queued at Splunk (…)* | Splunk has queued the search. |
+| *1,284 events found · 4.1 million scanned · 37% done* | The search is running. A search that summarises shows *results so far* instead of *events found*. |
+| *Finalizing* | Splunk is finishing the search. |
+| *Fetching results (…)* | The search is done; its rows are being read. |
+| *Cancelling* | You cancelled the search. |
+| *Failed at Splunk* | Splunk reported an error. |
+| *Waiting for the model (…)* / *Waiting for response (…)* | A model round, or another tool, is still working. |
+
+Click a row (or press Enter on it) to see its details: the step, its purpose, its
+status, when it started and how long it took, a short summary of what came back, and
+any attention notes. **Expand all** and **Collapse all** sit above the list; the arrow
+keys, Home and End move between rows. **Copy diagnostics** copies the steps' names, times,
+statuses, notes, ids, searches and counts as text for a support ticket. It never copies results
+or what a tool returned. In a step's Input and Output, passwords, keys and tokens are masked. A
+question opened from History also has **Export**: the steps as JSON (optionally with each step's
+inputs and outputs, masked as above), as OCSF events, or as OpenTelemetry spans.
+
+**Hints.** A Splunk search step's Summary can carry hints, each marked with its rule (for
+example *Hint (HNT-C): Wide time range (last 30 days).*). They come from fixed rules about
+the search itself (events read against events kept, no index named, a range over 7 days,
+verbose mode, time spent reading raw events, time queued, `transaction`, `join` or a
+subsearch), never from the AI.
+
+**Attention marks.** A step that needs a look gets a mark in front of its name and a
+short note under its purpose. An amber `!` means caution, a red `!` means something
+failed; a pulsing dot means the step is still running. The notes you can see:
+
+- `Failed: …` or `Timed out after …` (red);
+- `Refused: …`, when the app refused the step on purpose, for example a search
+  containing a command that is not allowed. The note gives the reason, cut short at a
+  word (caution, not a failure);
+- `Blocked by policy`, which is also what you see when you answered no in the
+  write-action confirmation;
+- `Partial result: …`, when a step returned only part of its result, for example a
+  check that stopped at its time limit;
+- `Slow: …`, for a search that took 20 s or more, a model round of 30 s or more, or
+  any other step of 15 s or more;
+- `ⓘ Cancelled`, for a step you cancelled (information only);
+- `0 rows: no access to index …` (caution), when a search found nothing and names an index your
+  roles cannot search;
+- `ⓘ Model saw … of …`, when a result was cut to fit the model's context; the full result is in
+  the step's Output tab;
+- `ⓘ No progress for 3 rounds`, when the model asked three times in a row without getting a new
+  result or writing an answer.
+- `Context nearly full` (caution), when a model round's input reached 80% of the model's context
+  window (judged only when the window is known).
+- `ⓘ Repeated call`, when the same tool ran with the same arguments earlier in the question;
+- `Output flagged for review` (caution), when a tool's output (today: a knowledge entry) was
+  flagged by the injection scanner; its text is treated as untrusted.
+
+A model round's details say which model answered and how it was called, its tokens in and out,
+when its first text arrived (when it streamed) and an estimated cost, when the model's price is
+known.
+
+When several notes apply, the row shows the most serious one followed by `+1`, `+2`
+and so on; the full list is in the row's details.
+
+**Stop.** While a question runs, a **Stop** button sits under the header. It ends the
+whole question at once: the running model call and any running Splunk searches are
+cancelled, and no new step starts. Nothing is undone: an object the assistant already
+created stays. The headline then reads *Cancelled after …*, and the question is
+recorded as cancelled.
+
+**Cancel search.** A step that is running a Splunk search shows **Cancel search**
+under its purpose. It stops that one search and lets the question continue. The
+assistant is told that you cancelled the search and how far it got, and is asked to
+answer with what it has or to try a narrower search. It does not run the same search
+again in this question; ask for it in a new message if you want it.
+
+**After two minutes.** When a search has run for two minutes, its row says
+*This search has run for 2 min*, shows its progress (and, when the app could estimate
+it, *Expected: about … min in total*), and offers **Keep waiting** next to
+**Cancel search**. **Keep waiting** hides the prompt and lets the search go on; it does
+not come back for that search. Nothing is ever cancelled for you.
+
+**What a cancelled search means for the answer.** The assistant only has what the
+search returned before you cancelled it, and its answer should say that you cancelled
+the search. If a draft answer blames a timeout or "the system" instead, the app sends
+it back once to be corrected.
+
+**Following the current step.** While the list is open, it scrolls by itself to keep
+the running step in view. Scroll up to read something and it stops following; scroll
+back to the bottom, or click **Jump to current step**, to follow again.
+
+### Estimates, checks and repeated searches
+
+To keep a run fast, the assistant reads as few events as it can, and the
+answer tells you when that shaped the result:
+
+- **"Estimate, sampled 1:N"** — when the matching events can be counted up
+  front and there are more than a million, the question is answered from a
+  sample. Counts and sums are scaled up from it; averages, distinct counts,
+  minimums, maximums and percentiles are the sample's own values. The answer
+  says which numbers are estimates. A word that occurs at most 100,000 times
+  is never sampled.
+- **"Searched only … (where ERROR occurs)"** — for a word that has to be in
+  every matching event, the search reads only the hours in which that word
+  occurs. The result is exact, not an estimate.
+- **"Checked over the last hour, sampled 1:10"** — after the assistant saves
+  a report or alert, it says what its check covered. Checks (dashboards too)
+  start with the last hour and widen only if they find nothing; the saved
+  object always keeps the time range you asked for.
+- **"Already run at …"** — the same search over the same long time range
+  runs once per request. A different breakdown of events that were already read
+  is not read again; the answer points to the earlier search instead.
+
+Ask for the exact count and the assistant runs the search again without
+sampling. After a save you can ask it to validate the report, alert or
+dashboard over its full time range, exactly as saved; it asks you to confirm
+first, because this can take minutes.
 
 ### Tips for getting better answers
 
@@ -304,7 +460,7 @@ The response block gives you more than prose:
   redacted sample event in the question. The LLM grounds much faster.
 - **Name the goal.** "I want to know when free memory drops more
   than 30 % in 15 minutes" is better than "make me an alert".
-- **Use the playbooks.** The AI-Toolkit playbooks know how to call
+- **Use the agents.** The AI Toolkit agents know how to call
   `fit`, `apply`, `ai`, and `listmodels` — they save a lot of
   back-and-forth versus starting from a blank prompt.
 
@@ -321,8 +477,8 @@ The LLM uses these Splunk tools on your behalf:
 | Fetch dashboard panel data | `splunk_get_dashboard_panel_data` | Doesn't return a screenshot — returns per-panel rows. |
 | Create / update SPL / saved search / alert / dashboard / report / lookup / field extraction | `splunk_create_*`, `splunk_update_*` | Requires you to have the right Splunk capability (alert creation needs `power`). |
 | AI Toolkit | `splunk_check_ml_capabilities`, `splunk_list_ml_models`, `splunk_ai_command` | Requires Splunk_ML_Toolkit installed and your role to allow `fit`/`apply`/`ai`. |
-| **Flag ingestion / onboarding problems** for a sourcetype *(1.5.0-dev)* | `splunk_check_ingest_health` | Reads **Splunk's own internal logs** for you to spot **timestamp-parse failures** (events landing at index time instead of the real event time), out-of-window timestamps, line truncation, and line-breaking warnings — problems a "is my data flowing?" check (like TrackMe) can miss. The assistant runs it before time-based work and reports a plain verdict (`ok` / `warnings` / `errors`). It works even though you normally can't read the internal logs (the app reads them on your behalf). **Available on every tier (incl. Personal/free)** as of v1.7.1 — access is bounded only by your Splunk role + the index's own ACL, not a licence tier. A clean result means "no errors logged", which is good but not a 100% guarantee. |
-| Read other playbooks | `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt` | Used by the `Default` router. Only returns playbooks your Org / BU / role can see. |
+| **Flag ingestion / onboarding problems** for a sourcetype | `splunk_check_ingest_health` | Reads **Splunk's own internal logs** for you to spot **timestamp-parse failures** (events landing at index time instead of the real event time), out-of-window timestamps, line truncation, and line-breaking warnings: problems a "is my data flowing?" check (like TrackMe) can miss. The assistant runs it before time-based work and reports a plain verdict (`ok` / `warnings` / `errors`). It works even though you normally can't read the internal logs (the app reads them on your behalf). **Available on every tier (incl. Personal/free)** as of v1.7.1; access is bounded only by your Splunk role + the index's own ACL, not a licence tier. A clean result means "no errors logged", which is good but not a 100% guarantee. |
+| Read other agents | `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt` | Used by the router. Only returns agents your Org / BU / role can see. |
 
 The LLM **cannot**:
 
@@ -334,20 +490,21 @@ The LLM **cannot**:
 - Create alerts unless you have the `power` role (or higher).
 - See or modify another user's history.
 - Talk about anything that isn't Splunk / SPL / AI-Toolkit. The
-  **General** guardrail playbook (silently prepended to every
-  question) refuses sexual / religious / political / racial / illegal
-  / medical / financial-advice content, and refuses to leak the API
+  **base guardrails** (silently prepended to every
+  question) refuse sexual / religious / political / racial / illegal
+  / medical / financial-advice content, and refuse to leak the API
   key or system prompts.
 
 ### Skills — invisible rules the LLM follows
 
-Each playbook you pick — or the **Default** router picks for you —
+Each agent you pick (or the router picks for you)
 comes with a list of **skills**: pre-written rules like "no emojis
-in dashboards", "every alert ships with a companion dashboard",
+in dashboards", "a proof dashboard shows the artifact working" (applied
+only when **Also build a proof dashboard** is on),
 "MLTK models must follow the `aiworkbench` naming pattern". The LLM
-sees these rules in front of the playbook's own workflow, so the
-outputs you get are consistent across playbooks that share the same
-rules. You don't pick skills — they're attached to the playbook.
+sees these rules in front of the agent's own workflow, so the
+outputs you get are consistent across agents that share the same
+rules. You don't pick skills; they're attached to the agent.
 
 If you're an admin you can browse and edit the catalogue from the
 new **Skills** tab. End users never see skills directly; they just
@@ -361,38 +518,39 @@ not installed in this environment"* — that's not an error, just an
 honest acknowledgement that the LLM didn't run a check it would
 normally run.
 
-### Creating your own playbooks
+### Creating your own agents
 
-You can now create your own playbooks without writing any YAML or
-schema — just describe what you want and the LLM does the rest.
+You can create your own agents without writing any YAML or
+schema: describe what you want and the LLM does the rest.
 
 **To create:**
 
-1. Open the Ask tab.
-2. In the playbook picker, pick **Create user playbook**.
-3. Fill in the four short questions:
-   - What should this playbook do? (one or two sentences)
-   - What inputs should users provide?
-   - Will it create knowledge objects (saved searches, dashboards,
-     alerts), or is it recommend-only?
-   - (optional) Closest existing playbook — pick one from your list
-     if you want the LLM to use it as a structural reference.
+1. Open the Console tab.
+2. In the **Agents** card, pick **Create your own agent**.
+3. Answer the questions in its form:
+   - *What should this agent do (one or two sentences, plain English)?*
+   - *What inputs should users provide when running it (one per line, free form)?*
+   - *Will it create knowledge objects (saved searches / dashboards / alerts),
+     or is it recommend-only?*
+   - *(optional) Which existing agent is closest to what you want?* Name
+     one if you want the LLM to use it as a structural reference.
+   - *(optional) Should its answers be terse rather than explanatory?*
 4. Submit. The LLM:
-   - Inspects similar playbooks if you named one.
+   - Inspects similar agents if you named one.
    - Picks the right cross-cutting skills (no emojis, validation
      loops, naming-collision handling, etc.).
-   - Composes a clean playbook body.
-   - Persists it as **your private playbook** — only you can see
+   - Writes a clean agent definition.
+   - Saves it as **your own private agent**: only you can see
      it; only you can refine it.
-5. The response includes the playbook's name. Your new playbook then appears
-   as a tile in the **Use-case playbooks** picker on the Ask tab — that is where
-   you use it from. The picker is your view of your own playbooks; there is no separate tab for
+5. The response includes the agent's name. Your new agent then appears
+   as a tile in the **Agents** card in the Console; that is where
+   you use it from. The card is your view of your own agents; there is no separate tab for
    them.
 
 **To refine later:**
 
-1. In the picker, pick **Update user playbook**.
-2. Name the playbook + describe what should change ("shorten the
+1. In the **Agents** card, pick **Update your own agent**.
+2. Name the agent and describe what should change ("shorten the
    intro paragraph", "add the data troubleshooting skill", "remove
    the alert step").
 3. The LLM fetches the current state, applies the change, and tells
@@ -401,28 +559,29 @@ schema — just describe what you want and the LLM does the rest.
 
 **What you cannot do (and why the LLM will refuse if you ask):**
 
-- *Make your playbook visible to your team / org / everyone* — the
-  Playbooks tab Promote / Demote menu (admin-only) handles that.
-- *Change the owner to someone else* — your private playbooks are
+- *Make your agent visible to your team / org / everyone*: an
+  administrator sets that under **Who can see it** on the agent's
+  **Visibility** tab in the **Agents** tab (admin-only).
+- *Change the owner to someone else*: your own private agents are
   always yours.
 - *Include a skill that doesn't exist or that admins haven't shared
   with you* — skills are admin-curated. If you need a rule that
   isn't a skill, ask your admin to add it.
-- *Set is_default / is_general* — those are reserved for system
-  playbooks.
+- *Set `is_default` / `is_general`*: those are reserved for the router
+  and the base guardrails.
 
 These refusals come from a defence layer called the
 **`prompt-injection-defense-on-authored-content` skill** (which the
 LLM follows automatically). Even if you trick the LLM into writing
 forbidden values, the server overrides them silently and logs the
-attempt for admin review — your playbook will still get created, just
+attempt for admin review. Your agent is still created, just
 with the safe defaults.
 
-**Quota:** 25 private playbooks per user by default.
+**Quota:** 25 private agents per user by default.
 
 > **If you hit the cap, ask your admin.** There is currently **no way for you to
-> delete your own playbook** — there is no Playbooks tab for non-admins and no
-> delete action in the picker. An admin can remove one for you, or raise the
+> delete your own agent**: there is no **Agents** tab for non-admins and no
+> delete action in the card. An admin can remove one for you, or raise the
 > quota for your Org.
 
 ### Errors you might see
@@ -442,14 +601,14 @@ Greyed out on the free tier. On Professional or higher:
 
 - A **Your totals (all-time)** card at the top — your own usage, summarised.
 - Conversations grouped by thread, newest first, each turn listed under it.
-- Click a row to re-ask the same question — the Ask tab opens with
+- Click a row to re-ask the same question — the Console tab opens with
   the question pre-filled.
-- Each row shows the playbook, the LLM/model, token cost, the
+- Each row shows the agent, the LLM/model, token cost, the
   created/updated knowledge objects as clickable links, and
   **Knowledge sources (N)** chips showing what the assistant consulted.
 
 **Finding an old answer.** There is a **Search the question…** box, plus
-**Playbook: any** and **Model: any** dropdowns and a **Clear filters** button.
+**Agent: any** and **Model: any** dropdowns and a **Clear filters** button.
 
 **Deleting.** Each turn has its own **Delete**; **Clear all** removes
 everything of yours. You cannot see or delete anyone else's.
@@ -484,7 +643,7 @@ You can:
   > different model, or your own API key used, ask your admin.
 
 - Activate or remove the app licence (License tab is hidden).
-- Add or remove Orgs / BUs / playbooks / tool assignments.
+- Add or remove Orgs / BUs / agents / tool assignments.
 
 ## The write-action confirmation
 
@@ -526,12 +685,12 @@ without it; it does not abandon your whole question.
 If the LLM you're about to use connects to a service outside your
 organisation (Anthropic, OpenAI, Azure OpenAI, Groq, Gemini, Bedrock,
 OpenRouter — basically every cloud provider), the app shows a
-full-screen confirmation modal before the first Ask and every time
+full-screen confirmation modal before the first run and every time
 you switch to that LLM. It lists exactly what data the LLM may see —
 your question text, the SPL it runs, the events / lookups it samples,
 the dashboard or alert XML it builds — and asks you to confirm:
 
-1. Your question contains no production credentials, API tokens,
+1. Your request contains no production credentials, API tokens,
    customer PII, or restricted-classification data.
 2. Sensitive field values are masked (user IDs, IP addresses, emails,
    account numbers replaced with placeholders).
@@ -542,17 +701,17 @@ the dashboard or alert XML it builds — and asks you to confirm:
 Two buttons:
 
 - **I understand — send this question** (when you triggered it by clicking
-  **Ask**) or **I understand — use this LLM** (when you triggered it by
+  **Run**) or **I understand — use this LLM** (when you triggered it by
   choosing the connection) — acknowledge and proceed. `Esc` cancels.
   The app remembers your acknowledgement for the current session, so
   subsequent Asks (and replies) with the same LLM don't re-prompt.
-- **Cancel** — close the modal. Your question text stays in the
+- **Cancel** — close the modal. Your request text stays in the
   textbox so you can review and mask before retrying.
 
 **Reset triggers**:
 - A full page reload (closing the tab + reopening, or Cmd+R) clears
   the acknowledgement and re-prompts.
-- The **Clear** button on the Ask tab does **not** reset the
+- The **Clear** button in the Console does **not** reset the
   acknowledgement.
 - Switching to a different LLM re-prompts (different LLM = different
   external connection).
@@ -564,7 +723,7 @@ LLM's configuration.
 
 ## Custom tools and MCP servers your admin may have added
 
-The LLM has **182** built-in tools that cover Splunk itself — running
+The LLM has **196** built-in tools that cover Splunk itself: running
 searches, listing indexes, building dashboards, ES / ITSI / TrackMe
 operations, MLTK, etc. Starting with version 0.4.0, your admin can
 also add **custom HTTP tools** that reach into other systems your
@@ -588,7 +747,7 @@ A few things to know:
 - The tools you can use are decided by your admin. If you think the
   LLM should be able to fetch a piece of information that it can't,
   ask the admin to consider adding a custom tool or wiring up an MCP
-  server. There may also be a tag/category filter on your playbook
+  server. There may also be a tag/category filter on your agent
   that scopes which tools the LLM sees — narrowing that helps the
   model focus on the right ones.
 - Anything a tool returns becomes part of what the LLM sees, just
@@ -601,19 +760,21 @@ A few things to know:
   status in the Tool calls panel, the LLM tried to call the same
   custom tool too many times in a minute — give it a moment and
   re-ask, or ask the admin to raise the limit if it's too tight.
-- Some tools resolve to per-Org / per-BU credentials. If you see a
-  "credential not configured" error, that means your tenant doesn't
-  have a credential stored for that tool yet — ask the admin to
-  add one in **Settings → Tool credentials**.
+- Some tools use a credential stored per Org, per BU or per user. If
+  your Org or BU has none stored for a tool, that tool is not offered
+  to the LLM at all. If a tool reports *"No per-user credential is
+  stored for …"*, nothing is stored for your account yet. In both cases
+  ask your Splunk administrator to store one, as the message says: there
+  is no screen where you add a tool credential yourself.
 
 ## AI Toolkit models you create via this app
 
-When you use one of the AI-Toolkit playbooks (Smart outlier detection,
+When you use one of the AI Toolkit agents (Smart outlier detection,
 Smart forecasting, Smart clustering, Smart prediction, Multi-field
 anomaly detection), the assistant trains a model in the app you're
 currently in (e.g. `search`) and then **promotes it to globally shared**
-so the companion dashboard works from any app — including the AI
-Toolkit's own Models tab.
+so the model and its proof dashboard (on by default for these agents)
+work from any app, including the AI Toolkit's own Models tab.
 
 Two things to know:
 
@@ -630,16 +791,16 @@ Two things to know:
   admin for extra capabilities.
 
 If the dashboard ever shows "Failed to load model — Model does not
-exist", the share step didn't run — re-ask the playbook, or ask your
+exist", the share step didn't run. Run the agent again, or ask your
 admin to check `splunkd.log` for `itmip_llm_audit action=mltk_share`
 entries.
 
 ## CDTSM — forecasting & anomaly detection without training
 
-If your Splunk has **AI Toolkit 5.7.3 or newer**, three extra playbooks
-appear in the Ask picker. They use **CDTSM** (the Cisco Deep Time Series
+If your Splunk has **AI Toolkit 5.7.3 or newer**, three extra agents
+appear in the agent picker in the Console. They use **CDTSM** (the Cisco Deep Time Series
 Model) — a model that is *already trained*, so unlike the AI-Toolkit
-playbooks above there is **no training step, no model to manage, and
+agents above there is **no training step, no model to manage, and
 nothing to share**. You point it at a metric and it forecasts (or finds
 anomalies in) it.
 
@@ -672,7 +833,7 @@ and the assistant picks a sensible value.
   (should be high — the model's idea of "normal" fits ordinary
   behaviour), plus the anomaly rate and a table of what was flagged.
 
-**Needs AI Toolkit.** If you do not see these playbooks, AI Toolkit is
+**Needs AI Toolkit.** If you do not see these agents, AI Toolkit is
 not installed (or is older than 5.7.3) — ask your admin. On a self-hosted
 Splunk your admin also has to set up a small Cisco model server; if a
 forecast fails with a connection or authentication error, that is what to
@@ -681,8 +842,8 @@ check (see your admin, or [the CDTSM forecasting guide](../admin/integrations/cd
 ## ATT&CK Tactic Hunt — technique coverage dashboard
 
 If your Splunk has **Splunk Security Essentials (SSE)** installed, an extra
-playbook — **ATT&CK Tactic Hunt — Technique Coverage Dashboard** — appears
-in the Ask picker. Pick a MITRE ATT&CK tactic and it builds a dashboard that
+agent, **ATT&CK Tactic Hunt — Technique Coverage Dashboard**, appears
+in the agent picker in the Console. Pick a MITRE ATT&CK tactic and it builds a dashboard that
 shows, per technique in that tactic, whether you currently have detection
 coverage and evidence in your data. The coverage is grounded in SSE's **real
 detections**, not the LLM's guesses, so what you see reflects what your
@@ -693,14 +854,14 @@ time window you chose is shown as a neutral "no evidence" tile, never a
 reassuring green "0" that could be mistaken for "all clear". That keeps you
 from trusting coverage you don't really have.
 
-**Needs Splunk Security Essentials.** If you do not see this playbook, SSE is
+**Needs Splunk Security Essentials.** If you do not see this agent, SSE is
 not installed or not visible to you — ask your admin.
 
 ## ServiceNow — ask about (and raise) tickets
 
 If your admin has connected your Org to ServiceNow, Adjutant AI can **read and
 write ServiceNow** for you — incidents, problems, changes, and the **CMDB**
-(your configuration-item / service catalogue) — straight from the Ask tab, in
+(your configuration-item / service catalogue) — straight from the Console, in
 plain English. You never touch a ServiceNow credential; the assistant reaches
 ServiceNow through the Splunk backend on your behalf.
 
@@ -730,7 +891,7 @@ ServiceNow through the Splunk backend on your behalf.
 **Good to know:**
 
 - **It can never hang your session.** If ServiceNow is slow or down, the
-  assistant says so and carries on — it won't freeze the Ask loop.
+  assistant says so and carries on — it won't freeze the run.
 - **It won't invent ServiceNow fields.** The assistant works from a known
   table/field map, so it asks ServiceNow only for things that actually exist on
   your instance instead of guessing.
@@ -744,15 +905,15 @@ see it, it isn't switched on for your Org.
 
 **Licensing.** ServiceNow needs a **Professional** edition **and** the
 `servicenow` feature on your license. On a tier without it, the ServiceNow
-playbooks and tools appear **greyed out with a 🔒 padlock** — ask your admin
+agents and tools appear **greyed out with a padlock**; ask your admin
 about enabling the feature. If your Org simply has no ServiceNow connection
 configured, the ServiceNow tools won't appear at all (your admin sets the
 connection up — see [the ServiceNow guide](../admin/integrations/servicenow.md)).
 
 ## Data Foundation — onboard a new data source
 
-The data-onboarding playbooks ("Data Source Onboarding (full)") do more than
-advise. Attach a raw **sample log from your computer** (see the Ask tab's
+The data-onboarding agents ("Data Source Onboarding (full)") do more than
+advise. Attach a raw **sample log from your computer** (see the Console's
 *Attach references* above) and ask the assistant to onboard it: it analyses the
 sample, drafts the `props.conf` / `transforms.conf` and friends, and produces a
 **deployment-ready config package** — a downloadable `.tar.gz` laid out as the
@@ -772,35 +933,37 @@ Splunk** — timestamp-parse failures, line truncation, and similar — by readi
 Splunk's own internal logs for you (a feed can look healthy yet still be parsed
 wrong). These onboarding features are **Professional+**.
 
-## Unattended playbooks (Backend Ask Service)
+## Unattended runs
 
-Beyond the interactive Ask tab, a playbook you author can be run **unattended**.
-You (or an operator) author a **playbook** describing an
+Beyond the Console, an agent you author can also run with nobody
+at the keyboard: unattended runs (called the Backend Ask Service in earlier
+documents). You (or an operator) author an **agent** describing an
 investigation; an **admin** then attaches it to a native Splunk alert, an ES
 correlation search (notable), or an ITSI episode. When the trigger fires, the
-backend runs the investigation server-side with no human in the loop — it
+agent runner runs the investigation server-side with no human in the loop: it
 gathers evidence, reaches a verdict, and writes a result back to the
 notable / episode (or an index report) and optionally emails a report.
 
-This engine ships **disabled by default** and is set up and operated by admins
+The agent runner ships **disabled by default** and is set up and operated by admins
 (it's bounded, allowlisted, and fully governed). As an end user the main thing
-to know is that the playbooks you write are what run this way. For the full
-picture see the Backend Ask Service guide.
+to know is that the agents you write are what run this way. For the full
+picture see the unattended runs guide.
 
-### Scheduled Ask — on a timer rather than a trigger
+### Unattended: on a timer rather than a trigger
 
-Admins can also put a playbook **on a schedule**, from the admin-only
-**Scheduled Ask** tab. Two kinds:
+Admins can also put an agent **on a schedule**, from the admin-only
+**Unattended** tab, which is also where every integration is listed and
+managed. Two kinds:
 
-- **Scheduled Job** — run a playbook and deliver a result, on a schedule.
+- **Scheduled Job**: run an agent and deliver a result, on a schedule.
 - **Scheduled Integration** — read a source and write to a target, repeatedly,
   keeping track of what it has already processed so it does not do the same work
   twice.
 
 You will not see the tab, and you do not need to. What matters to you is that
-**a playbook you wrote may be picked up and scheduled**, and that results you did
+**an agent you wrote may be picked up and scheduled**, and that results you did
 not personally ask for may originate this way. See
-the Scheduled Ask and memory guide and
+the unattended runs and memory guide and
 the AI Driven Integration guide if you are curious.
 
 ## The Help tab
@@ -814,7 +977,7 @@ licence tier** — the License tab is admin-only.
 
 ### 🐞 Report an issue / share diagnostics
 
-The button is on the Help tab, and also on the reply card of any Ask that went
+The button is on the Help tab, and also on the reply card of any run that went
 wrong (**🐞 Report issue**) — use that one, because it attaches the conversation
 that failed.
 
@@ -833,6 +996,11 @@ what is in it, choose **⬇ Download (.zip)** first — and see
 the support-bundle guide, which lists exactly what is collected and
 what is redacted.
 
+**What the package contains:** your question, the AI's answer, and every step of the conversation
+with its timings, counts, the search or arguments it ran (with secrets redacted), the Splunk job
+facts and all its IDs. **What it never contains:** what a tool returned: no search results, no
+records, nothing from a step's Output tab.
+
 ## Privacy, security, and what's logged
 
 - The contents of your questions and answers are sent to the
@@ -848,7 +1016,7 @@ what is redacted.
 - **Audit logging (v1.3.0).** Your organisation may enable an
   audit trail. When it is on, each time you send a request to an external
   LLM the system records — to a secured, admin/auditor-only index — **who
-  you are, which playbook you used, your answers (or full prompt), the
+  you are, which agent you used, your answers (or full prompt), the
   names of any objects you attached, which LLM and model, and the time**,
   together with the fact and time that you **accepted the security
   confirmation**. Depending on a per-organisation setting, the stored copy
@@ -864,15 +1032,15 @@ what is redacted.
 - **Org** — Organisation. First level of multi-tenancy; matches one
   or more Splunk apps and roles.
 - **BU** — Business Unit. Second level inside an Org.
-- **Playbook** — A pre-tuned prompt the app prepends to your
-  question. Playbooks have a `short_description` and may require
+- **Agent**: a pre-tuned prompt the app prepends to your
+  question, run with every action gated and logged. Agents have a `short_description` and may require
   specific apps (e.g. Splunk_ML_Toolkit) or roles (e.g. `power` for
-  alert creation).
-- **General guardrail** — The hidden safety prompt added to every
+  alert creation). An **agent template** is an agent that ships with the app.
+- **Base guardrails**: the hidden safety prompt added to every
   conversation. Defines what the app will and won't help with.
-- **Default router** — A special playbook that runs when you don't
+- **Router**: a special agent that runs when you don't
   pick a specific one. It looks at your question, lists every
-  playbook you have access to, picks the most relevant one, and runs
+  agent you have access to, picks the most relevant one, and runs
   it for you.
 
 ## Getting help

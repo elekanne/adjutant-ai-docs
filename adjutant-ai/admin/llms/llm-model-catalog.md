@@ -4,12 +4,12 @@ sidebar_position: 4
 
 # LLM Models & Cost Catalogue
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Status:** definitive. This is the reference for *which LLMs Adjutant AI can use*,
 what they cost, how one gets chosen, and how to add one the app has never heard of.
 
-> **Read §12 before you quote a price to a customer.** The shipped pack was priced
+> **Read §12 before you rely on a listed price.** The shipped pack was priced
 > on 2026-06-27 and has known gaps — including an Anthropic line-up that predates
 > the Claude 5 family.
 
@@ -30,7 +30,7 @@ what they cost, how one gets chosen, and how to add one the app has never heard 
 11. [The collection, the schema, the seed](#11-the-collection-the-schema-the-seed)
 12. [Known gaps and caveats](#12-known-gaps-and-caveats)
 13. [Tests](#13-tests)
-14. [Roadmap](#14-roadmap)
+14. [Not in this release](#14-not-in-this-release)
 
 ---
 
@@ -111,8 +111,8 @@ reported plainly rather than silently accepted.
 > gateway implements whichever its author chose. Answering 404 on one is not
 > evidence about the other, so after a refusal the wizard asks the second route
 > before concluding. One
-> extra GET, only after a refusal, only on Azure — added because a real customer's
-> gateway 404'd the first route and was told it published no models at all.
+> extra GET, only after a refusal, only on Azure. Without it, a gateway that returns
+> 404 for the first route would be reported as publishing no models at all.
 
 ### 2.2 Call modes
 
@@ -187,9 +187,9 @@ reasoning-parameter rule in §7.
 
 Since 2.4.x the app **discovers the endpoint** rather than making an admin
 assemble prefix + deployment + api-version by hand.
-Two customer setups — Azure OpenAI behind API Management, and behind a private
-endpoint — stalled for a fortnight on exactly that assembly, with green
-credentials and a 404 on every Ask that looked like an auth fault.
+That hand assembly is where Azure OpenAI behind API Management or behind a
+private endpoint most often goes wrong: the credentials test green and every run
+returns a 404 that looks like an auth fault.
 
 ### 3.4 Google Gemini
 
@@ -262,7 +262,7 @@ prompt content may not leave the building.
 
 This is the single most important thing to understand, and it surprises people:
 
-> **There is no per-Playbook, per-Skill or per-Scheduled-Ask model field.** A
+> **There is no model field per governed agent, per Skill or per agent job.** A
 > model is pinned on an **LLM configuration**, and everything else selects a
 > *configuration*.
 
@@ -271,7 +271,7 @@ Verified across the surfaces where you would expect to find one: the 90 rows of
 `itmip_ai_skills.json` carry no `model`, `provider` or `llm_*` key, and neither
 `[itmip_ai_use_cases]` nor `[itmip_ai_skills]` declares one in
 `default/collections.conf`. The unattended queue pins `llm_config_id`
-(`collections.conf:788`), Scheduled Ask pins `llm_config_id`, and the RCA ask
+(`collections.conf:788`), an agent job pins `llm_config_id`, and the RCA ask
 action pins `llm_config_id`. All of them
 choose a configuration; the configuration chooses the model.
 
@@ -282,7 +282,7 @@ Give a BU its own configuration and you have given it its own model.
 
 ### 4.2 The resolution ladder
 
-When nothing explicit was selected — an unattended Ask, an empty or
+When nothing explicit was selected — an unattended run, an empty or
 misconfigured catalogue — `safe_default_model()` resolves one. It **never dead-ends**, and returns the rung it landed on so drift
 is visible:
 
@@ -305,7 +305,7 @@ The full unattended chain is
 provider → shipped floor**,
 and the runner emits a drift warning on stderr when it falls past `safe_default`.
 
-The interactive Ask has no override layer at all — it passes
+A Console run has no override layer at all — it passes
 `opts.config.model` straight through, and prices with the same value.
 
 ### 4.3 The browser's mirror is shorter
@@ -323,7 +323,7 @@ If the catalogue REST call fails or has not loaded, the frontend falls back to
 `PROVIDER_DEFAULTS` — a hard-coded copy kept only for that case. **It is stale; see §12.2.**
 
 > **The practical advice:** tag exactly one row `safe_default` per provider you
-> actually use. Point it at your in-house gateway model and every unattended Ask
+> actually use. Point it at your in-house gateway model and every unattended run
 > routes there with zero per-call configuration. Today only one row in the whole
 > shipped pack carries the tag (§12.4).
 
@@ -360,10 +360,11 @@ with `discovery_source = live_provider`. Requires Professional+ (§9).
 
 ### 5.2 Register it by hand
 
-Models → the manual-registration form. Writes a catalogue row with
+Models → **+ Register model** (a dialog: Cancel or Register). Writes a catalogue row with
 `discovery_source = admin`, which the seed job and every discovery sweep are
 forbidden to overwrite. Use this for a restricted Azure deployment, a private
-gateway model, or anything a list endpoint will not admit exists. Requires admin
+gateway model, or anything a list endpoint will not admit exists. Give both prices or
+neither; with neither the row is listed with its price unknown. Requires admin
 **and** Enterprise (`model_catalog_overrides`).
 
 ### 5.3 `openai_compatible` — the endpoint the app has never met
@@ -407,7 +408,7 @@ There is no seeded model list and no discovery connector (§12.6), so these mode
 carry `price_status = unknown` until you register a price (§10). Usage is still
 recorded **with real token counts and a null cost rather than a fabricated
 figure**,
-and the Ask is never blocked.
+and the run is never blocked.
 
 ---
 
@@ -429,7 +430,7 @@ cost **server-side**, so the stored figure does not trust the browser.
 Because rates are frozen per event, a price change re-prices only *future* turns —
 **yesterday's recorded cost stays reproducible**. A model the catalogue cannot
 price records token counts with `price_status = unknown` and asserts no cost. It
-never blocks the Ask.
+never blocks the run.
 
 **Precedence when resolving a rate** (highest first):
 
@@ -502,11 +503,11 @@ that reads content gets at least that. A cap of exactly `1` is left alone — th
 is a status-only probe whose caller reads the HTTP code and never the text, and a
 deliberately cheap probe stays cheap.
 
-> **Why this is worth knowing.** The rule lives in two places — the browser cannot
-> call Python — and for a while only the browser knew it. A customer whose Ask
-> worked perfectly was told by *Test connection* that their endpoint URL was not a
-> chat-completions URL, because every server-side probe was sending `max_tokens`
-> and collecting a 400. The two halves are now pinned together by a test that
+> **Why this is worth knowing.** The rule lives in two places, because the browser cannot
+> call Python, and for a while only the browser knew it. An endpoint whose runs
+> worked perfectly could then fail *Test connection* with a message that its URL
+> was not a chat-completions URL, because every server-side probe was sending
+> `max_tokens` and collecting a 400. The two halves are now pinned together by a test that
 > reads the TypeScript source and fails the build if either side moves.
 
 ---
@@ -515,6 +516,8 @@ deliberately cheap probe stays cheap.
 
 A CSV of selector hints on each catalogue row. The shipped pack sets sensible
 defaults; an admin override survives later packs.
+In the *Register model* dialog they are checkboxes. The server still accepts a class
+not in this table, for older rows, and logs one warning per save naming it.
 
 | Class | Meaning |
 |---|---|
@@ -525,15 +528,15 @@ defaults; an admin override survives later packs.
 | `large_context` | Big context window. |
 | `vision` | Image input. |
 | `local` / `private` | Runs on your own hardware / network. |
-| `safe_default` | **Where unattended Asks route when nothing is selected.** Tag exactly one per provider. |
+| `safe_default` | **Where unattended runs route when nothing is selected.** Tag exactly one per provider. |
 
 ---
 
 ## 9. Live discovery
 
 Discovery enriches the catalogue by reading each configured provider's
-`list-models` endpoint. It is **additive** — never a runtime dependency of the
-Ask flow, and the only part of the catalogue story the free tier lacks
+`list-models` endpoint. It is **additive** — never a runtime dependency of a
+run, and the only part of the catalogue story the free tier lacks
 (`live_model_discovery`, Professional+).
 
 **Connectors** — `bin/llm_discovery/` mirrors the `bin/knowledge_connectors/`
@@ -585,7 +588,7 @@ the save (a 403 on free/non-admin is swallowed).
 `Authorization` headers or credential-bearing URLs (Gemini's `?key=` is stripped
 by `redact_url()`); error bodies are reduced to class + HTTP status by
 `sanitise_error()`, because provider bodies can echo auth; `account_ref` is the
-opaque config `_key`, never a tenant string.
+opaque config `_key`, never an Org string.
 
 > **Implementation note that will bite you.** `run_sweep()` is called both from
 > the scripted input (where stdout is the event pipeline) and from the REST
@@ -637,9 +640,9 @@ What is on it:
 | The catalogue table | Every row with price status, provenance, `price_as_of`, and a **⌛ staleness marker past 90 days**. |
 | **Came from** column | Plain words — *Shipped* / *Discovered &lt;date&gt;* / *Admin* — instead of the raw `discovery_source` enum. |
 | **Refresh from providers** | Runs a sweep now. 403s below Professional. |
-| **Set price** *(per row)* | Carries that row's identity into the override form. Enterprise admins only. |
+| **Set price** *(per row)* | Opens the *Set price* dialog with that row's model filled in. Enterprise admins only. |
 | Discovery run history | Past sweeps, with an upgrade explainer as the empty state on non-discovery tiers. |
-| Override + registration forms | Enterprise admins only; hidden otherwise, and the endpoint 403s regardless. |
+| *Price overrides* and *Registered models* | Two lists with **+ Set price** and **+ Register model**, and Edit and Delete per row. Each opens a dialog with labelled fields, the prices in US dollars per 1 million tokens, a worked cost example, and the server's own reason when a value is refused. Enterprise admins only; hidden otherwise, and the endpoint 403s regardless. |
 
 Arriving from a specific LLM configuration filters to that provider and highlights
 that configuration's default model (`initialProvider` / `focusModel`).
@@ -657,8 +660,8 @@ that configuration's default model (`initialProvider` / `focusModel`).
 | `itmip_llm_price_overrides` | Admin overrides, deliberately separate. |
 | `itmip_llm_model_catalog_runs` | Sanitised discovery-run history. |
 
-**ACL** (`metadata/default.meta`): catalogue **read `[ * ]`** — the bootstrap/Ask
-flow and the dropdown read it as any authenticated user via the system token —
+**ACL** (`metadata/default.meta`): catalogue **read `[ * ]`** — the bootstrap, the Console
+and the dropdown read it as any authenticated user via the system token —
 **write `[ admin, sc_admin ]`**. `export = none`.
 
 ### 11.2 Row schema
@@ -677,12 +680,12 @@ Grouped by what it is for:
 - **Display** — `display_name`, `speed`, `preference_classes`, `modalities`,
   `capabilities`, `note`
 
-Full list: `default/collections.conf:924-1040` and spec §5.
+Full list: the `[itmip_llm_model_catalog]` stanza in `default/collections.conf`.
 
 ### 11.3 Seeding
 
 The catalogue seed job runs **once at startup** (`interval = -1`, `passAuth = admin`) and materialises the catalogue
-**before any user interaction**, so the Ask flow is never the first reader. It is
+**before any user interaction**, so a Console run is never the first reader. It is
 idempotent and merge-not-replace:
 
 - Reads `seed_version` from `itmip_llm_catalog_meta`. If the shipped
@@ -711,9 +714,9 @@ you.
 The newest Anthropic models in the catalogue are **Opus 4.8, Sonnet 4.6 and Fable
 5**. The current generation — Opus 5, Sonnet 5, Fable 5.1 — is **absent from the
 entire codebase**, not just the seed: no `claude-opus-5`, `claude-sonnet-5` or
-`claude-fable-5-1` string exists anywhere in `bin/`, `src/` or `default/`.
+`claude-fable-5-1` string exists anywhere in the app.
 
-Nothing breaks. A customer can type the id into the model field and the adapter
+Nothing breaks. You can type the id into the model field and the adapter
 will send it; discovery will find it on the next sweep and add it with
 `price_status = unknown`. But **it is not offered in the dropdown, and it is not
 priced**, so cost reporting will record tokens without a cost. The fix is a seed
@@ -743,7 +746,7 @@ pack.
 `claude-sonnet-4-6` is the only row tagged `safe_default`, though §8 advises one
 per provider. For the other eight providers the ladder therefore always falls to
 rung 2 (`balanced_cheapest`) or lower. That is a *working* outcome — the ladder
-never dead-ends — but it means an unattended Ask on, say, Bedrock routes by price
+never dead-ends — but it means an unattended run on, say, Bedrock routes by price
 rather than by your choice. **Tag one per provider you use.**
 
 ### 12.5 The Bedrock discovery stub's stated reason is out of date
@@ -765,7 +768,7 @@ from both sweep sets**, so such a configuration is silently skipped rather than
 attempted and reported. Models on a custom gateway must be registered manually
 (§5.2) or typed in, and they stay `price_status = unknown` until someone sets a
 price. Reasonable — the app cannot guess a gateway's rate card — but worth knowing
-before you promise a customer cost reporting on their in-house endpoint.
+if you rely on cost reporting for an in-house endpoint.
 
 ### 12.7 Seven of nine providers are labelled "(preview)", and should not be
 
@@ -773,21 +776,20 @@ before you promise a customer cost reporting on their in-house endpoint.
 `openai_compatible`, which renders a **"(preview)"** suffix in the provider
 dropdown.
 
-That one label is the flag's **only** consumer anywhere in the repo. Nothing in
+That one label is the flag's **only** consumer anywhere in the app. Nothing in
 the dispatcher, proxy, wizard, licence tier or any handler reads it; it has no
 functional effect. Meanwhile all nine kinds route to a real adapter (the
 `default:` throw in `adapterFor` is unreachable), and each of the seven
 "scaffold" kinds has a discovery connector, a probe-provider profile, and
 provider-specific production handling.
 
-The flag has been touched twice in its life: introduced in `def05d6`
-(2026-05-12, *before* 1.7.0), and extended in `e97e5ec` (2026-09-14) only to add
-the ninth entry. **The seven `scaffold` values have never been revisited.**
+The flag predates 1.7.0 and has been extended once since, only to add the ninth
+entry. **The seven `scaffold` values have never been revisited.**
 
 The result is upside-down: every Azure, OpenAI, Gemini, Groq, Ollama, OpenRouter
 and Bedrock user reads "(preview)" next to a provider that has had years of
-customer-driven fixes, while `openai_compatible` — described in its own wizard
-card as *"the least tested path in the app"* — is one of the two marked `wired`.
+fixes from production use, while `openai_compatible`, described in its own wizard
+card as *"the least tested path in the app"*, is one of the two marked `wired`.
 
 ### 12.8 A failover to a different provider still sends the first one's model id
 
@@ -800,8 +802,8 @@ read only for telemetry.
 So a chain whose members use **different models or providers** will send the
 primary's model id to the secondary. Falling back between two configs on the same
 model — a second region, a spare key — behaves correctly, and that is the common
-shape. **Falling back across models or providers is the case to avoid** until
-this is fixed; it is a defect, not a documented design.
+shape. **Falling back across models or providers is the case to avoid**; it is a
+defect, not a documented design.
 
 ---
 
@@ -810,17 +812,16 @@ this is fixed; it is a defect, not a documented design.
 | Area | Covers |
 |---|---|
 | **The reasoning-parameter rule** *(17 tests)* | The GPT-5/o-series `max_completion_tokens` rule, **and that the Python and TypeScript halves agree** — it reads the adapter source and fails the build when either side moves. |
-| **Model detection on a gateway** *(16 tests)* | What the wizard can tell you about a model when the endpoint publishes no list. From an Azure-behind-a-Function customer. |
+| **Model detection on a gateway** *(16 tests)* | What the wizard can tell you about a model when the endpoint publishes no list. |
 | **The credential check names a model** *(33 tests)* | The credential check must name a model — for half the providers nothing ever gave it one. |
 
-These run under plain `python3`, or under Splunk's own interpreter with
-`$SPLUNK_HOME/bin/splunk cmd python`.
+These are part of the development test suite and are not shipped with the app.
 
 ---
 
-## 14. Roadmap
+## 14. Not in this release
 
-Not built: per-Org price overlays (the schema has `scope`, but only
-global/account overrides are wired), pricing-pack version pin/rollback, and the
-in-app "newer pack available" notice. Bedrock discovery is now unblocked (§12.5)
-but unwritten. See the spec for the full plan.
+Per-Org price overlays (the schema has `scope`, but only global and account
+overrides are wired), pinning or rolling back a pricing-pack version, and an
+in-app "newer pack available" notice. There is no Bedrock discovery connector
+(§12.5).

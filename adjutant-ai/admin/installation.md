@@ -4,12 +4,12 @@ sidebar_position: 1
 
 # Installation guide — Adjutant AI
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 
-This guide walks a Splunk administrator through deploying **AI User
-Assistent for Splunk** on a fresh customer environment and getting the
-app to a working, licensed, multi-tenant state.
+This guide walks a Splunk administrator through deploying **Adjutant
+AI** on a fresh customer environment and getting the
+app to a working, licensed, multi-Org state.
 
 ## 0. Prerequisites
 
@@ -39,8 +39,8 @@ app to a working, licensed, multi-tenant state.
 > **The version range has one machine-readable source of truth**:
 > `default/data/platform_compatibility.json`. The `app.conf` comment block, the
 > `python.required` declarations, the runtime guard and the Splunkbase
-> declaration are all **derived** from it, and CI
-> (`scripts/check_compatibility.ts`) fails the build when they disagree. If you
+> declaration are all **derived** from it, and the release build fails when
+> they disagree. If you
 > need to know what is supported, read that file — not prose, including this
 > prose. (The range cannot live in `app.manifest`: it has no version-*range*
 > field, only `targetWorkloads` / `supportedDeployments`.)
@@ -65,7 +65,7 @@ app to a working, licensed, multi-tenant state.
 ### Artefact and access
 
 - The downloaded `.spl` (or `.tar.gz`) artefact for the version you're
-  installing. The version below is **2.5.9**; substitute as needed.
+  installing. The version below is **2.7.0**; substitute as needed.
 - A web-browsing client that can reach the Splunk SH on port `8000`
   (HTTPS by default).
 - At least one of: an Anthropic API key (for the bootstrap LLM),
@@ -81,9 +81,9 @@ app to a working, licensed, multi-tenant state.
 
 Adjutant AI is a **single-page React application that has no use-cases
 of its own.** It is a *host shell*. Every piece of functionality an
-end user experiences inside it — which prompt playbooks appear, which
+end user experiences inside it (which governed agents appear, which
 LLMs they can call, which tools the LLM may use, where saved searches
-/ dashboards / alerts / MLTK models are written — is fully derived
+/ dashboards / alerts / MLTK models are written) is fully derived
 from two inputs:
 
 1. **The Splunk app the user opened the Workbench from** (the calling
@@ -93,12 +93,12 @@ from two inputs:
 
 From that pair the Workbench resolves an Organisation + Business Unit
 (configured on the **Orgs & BUs** tab) and renders an experience that
-is specific to that calling app / customer / tenant / team.
+is specific to that calling app / customer / Org / team.
 
 **It is therefore neither necessary nor recommended for end users to
 navigate to the `itmip_ai_splunk_assistent_app` tile directly.** The
-entire purpose of this app is to deliver an **AI assistant *inside
-other apps, for other users*** — Search, ITSI, Enterprise Security,
+entire purpose of this app is to deliver **governed agents *inside
+other apps, for other users***: Search, ITSI, Enterprise Security,
 your custom SOC apps, MSP customer apps. Treat
 `itmip_ai_splunk_assistent_app` itself as installation and admin
 plumbing; treat each *calling* app as the actual home of the assistant
@@ -111,7 +111,7 @@ The expected deployment pattern is therefore:
 2. **Embed it into the apps your users already live in.** For each
    Splunk app that should expose the assistant, edit that app's
    `data/ui/nav/default.xml` to add a nav-menu entry that opens
-   `…/app/<calling_app>/Adjutant AI`. The Workbench dashboard is
+   `…/app/<calling_app>/AiWorkbench`. The Workbench dashboard is
    shareable across apps — the only thing that matters is which app
    namespace the URL is opened *from*.
 3. **Configure Organisations and Business Units** on the **Orgs & BUs**
@@ -126,10 +126,10 @@ The expected deployment pattern is therefore:
    > until you restrict it**. Confirm it on the environment itself rather than
    > assuming it was done at install time.
 
-   Admins still need direct access — that is where Playbooks, Scheduled Ask,
+   Admins still need direct access: that is where Agents, Unattended,
    Tokens & Costs, Orgs & BUs, License, Backups, Tools, Models and Settings
-   live — but exposing the bare app tile to end users defeats the host-shell
-   design and bypasses the per-tenant namespace isolation described below.
+   live. But exposing the bare app tile to end users defeats the host-shell
+   design and bypasses the per-Org namespace isolation described below.
 
    To restrict it, set the visibility in `metadata/local.meta` (and/or
    `local/app.conf` `is_visible = 0`) and reload:
@@ -140,11 +140,12 @@ The expected deployment pattern is therefore:
    access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
    ```
 
-   Note that this hides the **tile**, not the app's dashboards: several nav
-   views (ITSI RCA, AI Activity, LLM Health, Automation Outcomes, Pipeline
-   Knobs, Resource Consumption) are readable by any user by design. The Outcome
-   Ledger, Behaviour (OCSF) and Fraud Readiness views are already restricted to
-   `admin` / `sc_admin` in `default.meta`.
+   Note that this hides the **tile**, not the app's dashboards. The nav views
+   (ITSI RCA, AI Activity, LLM Health, Automation Outcomes, Pipeline Knobs,
+   Resource Consumption, Outcome Ledger, Behaviour (OCSF), Fraud Readiness) are
+   restricted to administrators in `default.meta`; the lookups they read are
+   too, because a KV Store lookup is readable by anyone who can read its
+   definition, whatever the collection's own permissions.
 
 Two operational consequences flow directly from this design:
 
@@ -156,7 +157,7 @@ Two operational consequences flow directly from this design:
   opening the Workbench from app *Y* writes future artefacts into
   app *Y* instead — no admin action required.
 - **Org / BU is resolved automatically** from `(calling Splunk app,
-  user roles)`. End users don't pick a tenant — you configure
+  user roles)`. End users don't pick an Org; you configure
   Organisations (by `app_patterns`) and Business Units (by role
   patterns / user lists) once, and Adjutant AI picks the first
   matching pair on each page load. Users who match no Org see a
@@ -188,34 +189,35 @@ $SPLUNK_HOME/bin/splunk restart
 
 > **SHC:** push the tarball through the deployer; members will
 > restart automatically when the bundle is applied. Verify each member
-> reports the same `version = 1.4.1` in `default/app.conf` after the
+> reports the same `version = 2.7.0` in `default/app.conf` after the
 > rolling restart.
 
 ## 1b. What the install actually creates
 
 Useful when you are reviewing the app before deploying it, or explaining its
-footprint to a platform team. Counts are for 2.5.9.
+footprint to a platform team. Counts are for 2.7.0.
 
 | | Count | Notes |
 |---|--:|---|
-| KV Store collections | **76** | `default/collections.conf`. Everything the app knows lives here — see the KV Store prerequisite in §0. |
-| Persistent REST handlers | **55** | `default/restmap.conf`, all `scripttype = persist`. Registered **only on restart**. |
+| KV Store collections | **82** | `default/collections.conf`. Everything the app knows lives here; see the KV Store prerequisite in §0. |
+| Persistent REST handlers | **60** | `default/restmap.conf`, all `scripttype = persist`. Registered **only on restart**. |
 | Scripted / modular inputs | **13** | All `disabled = false`, all `passAuth = admin`. See below. |
-| Saved searches | **7** | All shipped **disabled** — five agent-queue alerts and two example playbooks. Nothing schedules itself. |
-| Seed files | **7** | 90 playbooks, 52 skills, 31 catalogue models, 1 Org (`DFLT`), 1 BU (`DFLT_DFLT`), plus two intentionally empty. |
+| Saved searches | **7** | All shipped **disabled**: five agent-queue alerts and two example searches that start an agent run. Nothing schedules itself. |
+| Seed files | **7** | 90 agent templates (67 ready, 23 in preview), 53 skills, 31 catalogue models, 1 Org (`DFLT`), 1 BU (`DFLT_DFLT`), plus two intentionally empty. |
 | Custom roles / capabilities | **0** | There is no `authorize.conf`. The app uses stock roles plus per-object ACLs in `metadata/default.meta`. |
 | `indexes.conf` | **none** | Deliberate — a static index definition fails Cloud vetting, and operators should own sizing and retention. You create the indexes (§1c). |
 
 ### The 13 inputs
 
-Ten write to `_internal`; only the licence monitor writes to `main`. Most are
+Eleven write to `_internal`. The licence monitor writes to `main`, and the KV
+Store backup sends its events to your snapshot index (§1c). Most are
 **inert until you turn something on**, which is why a fresh install is quiet.
 
 | Input | Interval | What it does |
 |---|--:|---|
 | `itmip_llm_license_monitor.py` | 6h | Licence-expiry event. Silent until ≤30 days. |
 | `itmip_llm_kvstore_backup.py` | 600s | Daily snapshot decision, manifest, credential inventory, verification. Routes via `receivers/simple` to your configured snapshot index. |
-| `itmip_llm_agent_dispatcher.py` | **5s** | Backend Ask Service — claims queue rows and spawns runners. **Inert until `[agent_runner] enabled = 1`.** |
+| `itmip_llm_agent_dispatcher.py` | **5s** | Dispatcher for unattended runs (called the Backend Ask Service in earlier documents): claims queue rows and spawns agent runners. **Inert until `[agent_runner] enabled = 1`.** |
 | `itmip_llm_feedback_collector.py` | 300s | Maps analyst dispositions back to a run. Inert unless enabled *and* `feedback_capture = 1`. |
 | `itmip_llm_diagnosis.py` | 1h | Proactive pipeline-tuning recommendation email. |
 | `itmip_llm_catalog_seed.py` | 300s | Seeds the model catalogue; gated on `SEED_VERSION`. |
@@ -266,7 +268,7 @@ index settings.
 Open the app once in the browser:
 
 ```
-https://<splunk-sh>:8000/en-US/app/itmip_ai_splunk_assistent_app/Adjutant AI
+https://<splunk-sh>:8000/en-US/app/itmip_ai_splunk_assistent_app/AiWorkbench
 ```
 
 The first load does several things automatically:
@@ -274,9 +276,9 @@ The first load does several things automatically:
 - Calls `/services/itmip_llm/setup` which seeds the KVStore
   collections from `default/data/seeds/*.json`. After this you have
   one default Organisation (`DFLT`), one default Business Unit
-  (`DFLT_DFLT`), and the seeded use-case playbooks (**90** today; the
-  **Playbooks** tab and
-  [the tools and playbooks overview](./tools/tools-and-playbooks.md)
+  (`DFLT_DFLT`), and the agent templates (**67** ready and 23 in preview today; the
+  **Agents** tab and
+  [the tools and agent templates overview](./tools/tools-and-playbooks.md)
   are the source of truth for the current catalogue).
 - Renders the **"Running on free License"** badge next to the app
   title. The Personal (free) tier is **single-user**: it binds to the
@@ -431,7 +433,7 @@ recommended models).
 ## 6. (Optional) Customer authorisation hook
 
 If the customer's LLM endpoint sits behind a corporate IAM gateway
-(WebEAM.Next, Ping, Okta, AzureAD, internal SAML…) the static
+(WebEAM, Ping, Okta, AzureAD, internal SAML…) the static
 "Extra HTTP headers" field on the LLM config isn't enough — short-lived
 tokens need to be refreshed per request. Toggle **Customer
 authorisation hook** on the LLM config and edit
@@ -469,7 +471,7 @@ Enterprise feature as of 1.4.1** (it moved up from Professional under
 the per-feature capability matrix). A licence downgrade *hides* over-cap
 content, it never deletes it — see the licensing reference.
 
-## 8. (Optional) Per-tenant tool gating
+## 8. (Optional) Per-Org tool gating
 
 The **Tools** tab (admin-only) lists every Claude/LLM tool the
 dispatcher exposes. Toggle individual tools on or off per
@@ -497,7 +499,7 @@ silent until `expires_in_days ≤ 30`.
 ## 9b. (Optional) Real audit logging (Enterprise as of 1.4.1; 1.3.0)
 
 If you need a legally-defensible record of who sent what to which LLM
-(and who changed playbooks / tools / MCP / LLM configs), configure
+(and who changed agents / tools / MCP / LLM configs), configure
 per-Org audit logging. As of 1.4.1 it is an **Enterprise** feature (the
 `audit_logging` capability moved up from Professional under the
 per-feature licensing matrix) and the app **never creates indexes** —
@@ -528,7 +530,7 @@ A clean install should pass all of:
 ```bash
 # Persistent REST handlers reachable
 curl -k -u admin:<pw> https://localhost:8089/services/itmip_llm/setup       -X POST
-curl -k -u admin:<pw> https://localhost:8089/services/itmip_llm/use_cases   # seeded playbooks (90 as of 2.5.9)
+curl -k -u admin:<pw> https://localhost:8089/services/itmip_llm/use_cases   # seeded agent templates (90 as of 2.7.0)
 curl -k -u admin:<pw> https://localhost:8089/services/itmip_llm/license     # has guid + tier
 curl -k -u admin:<pw> https://localhost:8089/services/itmip_llm/tenancy -X POST \
     -d '{"action":"create_org","short":"TEST","name":"Test"}' \
@@ -546,9 +548,9 @@ In the browser, confirm:
 - The app title reads **"Adjutant AI"**.
 - A license badge appears next to the title (free / PoV / NFR / no
   badge for plain Pro/Ent/MSP).
-- The Ask tab loads the LLM dropdown and the playbook tiles.
-- At least one playbook tile says **`Default`** (the router) and one
-  is `General` (the guardrail) — both are operational seed playbooks.
+- The Console tab loads the LLM dropdown and the agent tiles.
+- At least one agent tile says **`Default`** (the router) and one
+  is `General` (the base guardrails); both are ready agent templates.
 
 ### 10.1 Deeper checks
 
@@ -560,17 +562,10 @@ In the browser, confirm:
 | Diagnostics | **Help → 🐞 Report an issue**. Produces an encrypted `.itmipdiag` package. See the support-bundle guide for exactly what it collects and redacts before you send one. |
 | Stateless boot | Read `itmip_stateless_boot` — `state` is one of `restoring` / `ready` / `degraded` / `failed`, with a per-collection `snapshot_outcomes`. Then `aws s3 ls s3://<bucket>/<prefix>/<env_id>/_meta/boot/`. |
 
-There are also **34 scripts in `tools/`** that are useful at install time and
-that this guide never mentioned. The ones to know:
-
-| Script | Proves |
-|---|---|
-| `verify_s3_store.py` | The bucket, credentials and policy work — **before** you enable stateless. |
-| `verify_secrets_store.py` | The Secrets Manager path end to end, read and write. |
-| `check_rest_exposure.sh` | No handler is exposed more widely than intended. |
-| `check_seed_drift.sh` | Shipped seeds still match what the app expects. |
-| `run_appinspect.py` | Cloud vetting, before you submit rather than after. |
-| `load_demo_data.py` / `verify_demo_data.py` | A demo dataset, for a PoV environment. |
+Before you enable stateless operation (§12), prove the bucket and the Secrets
+Manager path with the checks in [the stateless operation guide](./stateless.md)
+(§13.1 and §4.3). Support can also supply verification scripts that run them for
+you.
 
 ## 10.2 Upgrading
 
@@ -600,7 +595,7 @@ Then:
 
 **What bites on upgrade:**
 
-- A playbook you **edited** is skipped by content-pack import — by design — so
+- An agent template you **edited** is skipped by content-pack import, by design, so
   it will not pick up upstream fixes. That is the trade for not losing your
   changes; know which ones you have customised.
 - If the indexes in §1c were never created, those writes have been dropped all
@@ -615,10 +610,10 @@ Then:
 Refer to the role-specific manuals:
 
 - **[the user manual](../user/user-manual.md)** — for the non-admin
-  end-user. Covers the Ask tab, History, picking playbooks, attaching
+  end-user. Covers the Console tab, History, picking agents, attaching
   references.
 - **[the admin manual](./admin-manual.md)** — for `admin` /
-  `sc_admin`. Covers Playbooks, Tokens & Costs, Orgs & BUs, License,
+  `sc_admin`. Covers Agents, Tokens & Costs, Orgs & BUs, License,
   Settings, the v0.8.0 KVStore backup subsystem, and the v0.9.0
   restore wizard.
 - **[the tool catalogue](./tools/tool-catalogue.md)** — built-in tool catalogue, per-Org/BU
@@ -643,14 +638,14 @@ Added since this guide was last revised — the subjects that did not exist at
 
 | Doc | Covers |
 |---|---|
-| **the playbook catalogue** | Every shipped playbook and the use case it covers, with a verdict per run mode (interactive Ask, Scheduled Ask, MCP, AI Driven Integration). Start here when someone asks "what can it actually do". |
+| **the agent catalogue** | Every agent template and the use case it covers, with a verdict per run mode (Console, Unattended, MCP, AI Driven Integration). Start here when someone asks "what can it actually do". |
 | **[the LLM model catalogue](./llms/llm-model-catalog.md)** | The nine providers, the 31 seeded models and their prices, how a model gets chosen, and how to add one the app has never heard of. |
 | **the connection-wizard guide** | The four-step connection wizard and its ten-rung test ladder — what each rung proves and what a failure at it means. |
 | **the AI Driven Integration guide** | Unattended integrations: the versioned mapping contract, watermarks, receipts, clearance and drift. |
-| **the Scheduled Ask and memory guide** | Scheduled Ask — Jobs and Integrations — and the memory model behind them. |
+| **the unattended runs and memory guide** | Unattended runs (Agent jobs and Integrations) and the memory model behind them. |
 | **[the stateless operation guide](./stateless.md)** | Running on a disposable search head (§12). Bucket policy, IAM, lifecycle, the lease, verification. |
 | **[the MCP server guide](./tools/mcp-server.md)** / **[the MCP OAuth guide](./tools/mcp-oauth.md)** | Adjutant as an MCP *server* — exposing its tools to other agents — and the OAuth path. |
-| **[the custom-tools guide](./tools/custom-tools-authoring.md)** | Custom HTTP tools: purpose, authoring, limits, and assigning them to playbooks. |
+| **[the custom-tools guide](./tools/custom-tools-authoring.md)** | Custom HTTP tools: purpose, authoring, limits, and assigning them to agents. |
 | **[the ServiceNow guide](./integrations/servicenow.md)** | ServiceNow ITSM/SIR connections and the tools they expose. |
 | **the Outcome Ledger guide** | What the app claims it did, and whether it actually happened. |
 | **the support-bundle guide** | The "Report an issue" diagnostic package — what it collects and what it redacts. |
@@ -768,12 +763,12 @@ this stanza would mean writing your state somewhere you did not choose.
 | `allow_env_secrets` | `1` | Reserved; `env://` refs are refused. The key exists so the refusal is explicit rather than a silent miss. |
 
 Other keys worth knowing at install time: `restore_on_start` (default `1`),
-`readiness_gate` (`1` — refuses Scheduled Asks until the restore finishes),
+`readiness_gate` (`1` — refuses unattended runs until the restore finishes),
 `write_through` (`1` — object store first, and the caller fails if it refuses),
 and `restore_timeout_seconds` (`600`; exceeding it is `degraded`, never a partial
 restore).
 
-### 12.4 Credentials that survive the rebuild (SL3)
+### 12.4 Credentials that survive the rebuild
 
 By default, credentials live in Splunk's `storage/passwords` — which is on the
 disk that the rebuild destroys. Point them at **AWS Secrets Manager** instead:
@@ -794,17 +789,17 @@ still works — `splunk://realm:name` — and remains the default.
 | `secrets_backend` | `none` | `aws_secrets_manager` turns `awssm://` on. Nothing else in this block does anything while it is `none`. |
 | `secrets_write` | `app` | `app` lets the UI store a credential; `operator` accepts only refs it can resolve and needs no write permission at all. **Neither can delete** — a rotation is a new version. |
 | `storage_passwords_policy` | `allow` | `refuse` stops credentials resolving from Splunk's store. Refused at boot when `secrets_backend = none`, since that would leave no store at all. |
-| `secret_cache_ttl_seconds` | `300` | How long a resolved secret is held in memory. Without it, every Ask makes an AWS round trip per credential. Dropped on rotation. |
+| `secret_cache_ttl_seconds` | `300` | How long a resolved secret is held in memory. Without it, every run makes an AWS round trip per credential. Dropped on rotation. |
 
 The IAM policy for the instance role needs `secretsmanager:GetSecretValue` (and
 `PutSecretValue` + `CreateSecret` if `secrets_write = app`), scoped to
-`secrets_prefix`. `tools/verify_secrets_store.py` proves the whole path against
-the real account before you trust it.
+`secrets_prefix`. The checks in [the stateless operation guide](./stateless.md),
+§4.3, prove the whole path against the real account before you trust it.
 
 ### 12.5 Proving it actually works
 
-Do not accept a green boot as proof. The test that counts is: **enable it, let a
-Scheduled Ask run, destroy the instance, rebuild it from the image, and check
+Do not accept a green boot as proof. The test that counts is: **enable it, let an
+unattended run start, destroy the instance, rebuild it from the image, and check
 that the watermark did not reset and the integration did not re-emit.** A restore
 that quietly starts from zero looks identical to a healthy first run until
 duplicates land downstream. [The stateless operation guide](./stateless.md), §13, has

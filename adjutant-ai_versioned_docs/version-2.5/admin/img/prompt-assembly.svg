@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" width="800" height="560" role="img" aria-labelledby="t d">
+  <title id="t">How skills, playbooks and tools become one prompt</title>
+  <desc id="d">The guardrail sits above three layers. Skills hold reusable prose, the playbook holds the workflow and names which skills it includes, and tools are the functions the model may call. Skills and the playbook body are concatenated into the assembled prompt; the model then calls tools while it works.</desc>
+
+  <style>
+    .lbl  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px; fill: #e8eef7; }
+    .hd   { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px; font-weight: 700; fill: #e8eef7; }
+    .dim  { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px; fill: #9db0cc; }
+    .edge { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px; fill: #9db0cc; }
+    .reg  { fill: #1e3054; stroke: #43598a; stroke-width: 1; }
+    .chip { fill: #2a4372; stroke: #43598a; stroke-width: 1; }
+    .ln   { stroke: #43598a; stroke-width: 1.5; fill: none; }
+  </style>
+
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#43598a"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="798" height="558" rx="10" fill="#14233f" stroke="#b8860b" stroke-width="1.5"/>
+
+  <!-- guardrail -->
+  <rect class="chip" x="256" y="28" width="288" height="50" rx="4"/>
+  <text class="hd"  x="400" y="50" text-anchor="middle">General guardrail</text>
+  <text class="dim" x="400" y="68" text-anchor="middle">added to every conversation</text>
+  <path class="ln" d="M400 78 L400 104" marker-end="url(#a)"/>
+
+  <!-- three layers -->
+  <rect class="reg" x="28"  y="108" width="228" height="196" rx="4"/>
+  <text class="hd"  x="44" y="132">Skills</text>
+  <text class="dim" x="44" y="154">Reusable prose, written once.</text>
+  <text class="lbl" x="44" y="178">“no emojis”</text>
+  <text class="lbl" x="44" y="200">“dashboard token rules”</text>
+  <text class="lbl" x="44" y="222">“feed-health verdict”</text>
+  <text class="dim" x="44" y="252">Up to 4000 characters.</text>
+  <text class="dim" x="44" y="272">Scoped per Org and BU.</text>
+  <text class="dim" x="44" y="292">Refreshed from the seed.</text>
+
+  <rect class="reg" x="286" y="108" width="228" height="196" rx="4"/>
+  <text class="hd"  x="302" y="132">Playbook</text>
+  <text class="dim" x="302" y="154">The workflow for one task.</text>
+  <text class="lbl" x="302" y="178">Phases and form inputs</text>
+  <text class="lbl" x="302" y="200">Required apps and roles</text>
+  <text class="lbl" x="302" y="222">Org and BU scope</text>
+  <rect class="chip" x="302" y="240" width="196" height="50" rx="4"/>
+  <text class="dim" x="314" y="260">names the skills</text>
+  <text class="dim" x="314" y="280">it wants included</text>
+
+  <rect class="reg" x="544" y="108" width="228" height="196" rx="4"/>
+  <text class="hd"  x="560" y="132">Tools</text>
+  <text class="dim" x="560" y="154">Functions the model may call.</text>
+  <text class="lbl" x="560" y="178">Run a search</text>
+  <text class="lbl" x="560" y="200">Create a dashboard or alert</text>
+  <text class="lbl" x="560" y="222">Read ES, ITSI, ServiceNow</text>
+  <text class="dim" x="560" y="252">182 built in, plus your own</text>
+  <text class="dim" x="560" y="272">HTTP tools and any imported</text>
+  <text class="dim" x="560" y="292">from an MCP server.</text>
+
+  <!-- playbook pulls skills -->
+  <path class="ln" d="M286 206 L256 206" marker-end="url(#a)"/>
+
+  <!-- into the prompt -->
+  <path class="ln" d="M142 304 L142 344 L360 344 L360 366" marker-end="url(#a)"/>
+  <path class="ln" d="M400 304 L400 366" marker-end="url(#a)"/>
+  <text class="edge" x="152" y="330">resolved when the playbook is fetched</text>
+
+  <!-- tools called later -->
+  <path class="ln" d="M658 304 L658 452 L604 452" marker-end="url(#a)"/>
+  <text class="edge" x="646" y="330" text-anchor="end">called while the model works</text>
+
+  <!-- assembled prompt -->
+  <rect class="reg" x="120" y="370" width="484" height="162" rx="4"/>
+  <text class="hd"  x="140" y="396">The assembled prompt</text>
+  <text class="dim" x="140" y="416">what the model finally reads</text>
+  <text class="lbl" x="140" y="444">1 · the guardrail</text>
+  <text class="lbl" x="140" y="468">2 · every included skill, in order</text>
+  <text class="lbl" x="140" y="492">3 · the playbook body and your question</text>
+  <text class="dim" x="140" y="518">The model then calls tools to do the work.</text>
+</svg>

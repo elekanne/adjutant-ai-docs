@@ -4,7 +4,7 @@ sidebar_position: 11
 
 # MCP OAuth 2.1 — connecting Adjutant AI to OAuth-protected MCP servers
 
-**App version:** 2.5.9  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk admins,
+**App version:** 2.7.0  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk admins,
 integrators, security reviewers.
 
 Adjutant AI can connect to remote **Model Context Protocol (MCP)** servers that require
@@ -56,7 +56,7 @@ sequenceDiagram
     Note over D: Validate state and session,<br/>exchange the code using PKCE,<br/>store the token encrypted.
     D-->>S: connected
     Note over S,B: The token is never sent to the browser.
-    B->>D: Later — an Ask uses an MCP tool
+    B->>D: Later, a run uses an MCP tool
     D->>I: Bearer token
 ```
 
@@ -75,8 +75,8 @@ Key points:
 **Tools → MCP servers → + Register MCP server** (admin only; requires an Enterprise license —
 OAuth rides the existing `mcp_servers` gate, it is not separately licensed).
 
-1. Fill in **Name**, **Short**, **Endpoint URL**, **Org/BU** as for any MCP server.
-2. Under **Authentication**, set **Authentication type = OAuth 2.1**. Then:
+1. On the **General** tab, fill in **Name**, **Short**, **Endpoint URL** and the Org/BU, as for any MCP server.
+2. On the **Authentication** tab, set **Authentication type = OAuth 2.1**. Then:
 
 | Field | Meaning |
 |---|---|
@@ -92,8 +92,8 @@ OAuth rides the existing `mcp_servers` gate, it is not separately licensed).
    `https://<your-splunk-web-host>:8000/en-US/app/itmip_ai_splunk_assistent_app/<view>?mcp_oauth=1`.
    It is **the same for all Orgs** in a deployment — register it in each IdP/instance's OAuth app.
 4. Store the client secret (if confidential) in `storage/passwords` under the name you put in
-   **Client secret ref** (Tools → custom-tool credentials, or the secret REST endpoint).
-5. **Save**.
+   **Client secret ref**, through the splunkd REST API or CLI; the app has no screen for storing it.
+5. **Register** (**Save changes** when you edit an existing server).
 
 ### Storing the client secret
 The client secret is referenced by name, never typed into KVStore. Save it the same way as any
@@ -116,10 +116,10 @@ After saving, the server card shows an **OAuth: not connected** badge and a **Co
 - **`service`** — an admin connects a dedicated service/integration user once; the refreshable token
   is reused for **unattended** runs. *This is ServiceNow's near-term unattended pattern* (a
   dedicated integration user, admin consents once, the token is stored and refreshed).
-- **`per_user`** — the connection is per individual user. In v1.5.0 the **Connect** action is in the
-  admin Tools tab; until a given user has their own token, interactive use falls back to a `shared`
-  connection if one exists. (Per-user end-user self-service connect UI is a planned follow-up; the
-  backend already supports per-user tokens.)
+- **`per_user`**: the connection is per individual user, and the backend keeps a separate token for
+  each user who connects. The **Connect** action is on the **Tools** tab, which is admin-only, so
+  there is no screen where a non-admin user connects their own account. Until a given user has
+  their own token, interactive use falls back to a `shared` connection if one exists.
 
 ---
 

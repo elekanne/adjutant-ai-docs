@@ -2,14 +2,14 @@
 sidebar_position: 12
 ---
 
-# ServiceNow integration — tools, knowledge, playbooks
+# ServiceNow integration: tools, knowledge, governed agents
 
-**App version:** 2.5.9  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk admins,
+**App version:** 2.7.0  ·  **Last updated:** 2026-10-12  ·  **Audience:** Splunk admins,
 SOC/ITOps engineers, integrators, security reviewers.
 
-Adjutant AI (formerly AI Workbench) can **read and write ServiceNow** — incidents, security incidents (SIR), changes,
-problems, events, and the **CMDB/CSDM** — from the interactive Ask tab **and** from the unattended
-backend engine (alert → playbook). It works over two interchangeable per-Org transports (direct
+Adjutant AI (formerly AI Workbench) can **read and write ServiceNow**: incidents, security incidents (SIR), changes,
+problems, events, and the **CMDB/CSDM**. It does so from the Console **and** from unattended
+runs (called the Backend Ask Service in earlier documents), where an alert starts an agent. It works over two interchangeable per-Org transports (direct
 **REST** or a **ServiceNow MCP server**), turns Splunk/ITSI/ES alerts into **rich, well-formatted**
 ServiceNow incidents, and writes the incident number **back** to the originating Splunk object.
 
@@ -39,7 +39,7 @@ ServiceNow incidents, and writes the incident number **back** to the originating
 | **SIR (security incidents)** | `servicenow_get_security_incidents` / `_create_security_incident` / `_update_security_incident` on `sn_si_incident`, with MITRE ATT&CK association. | Professional + `servicenow`, **only when `sir_enabled`** |
 | **Knowledge** | CSDM logical→physical map, choice/state code dictionaries, encoded-query grammar, API-failure runbook, relationship-traversal dictionary — so the LLM is *given* the schema, never guesses. | Professional + `servicenow` |
 | **Skills** | `servicenow-structured-discipline`, `servicenow-incident-description-authoring`, `servicenow-tisc-enrichment`. | Professional + `servicenow` |
-| **Playbooks** | "ServiceNow CMDB Lookup & Enrichment", "ServiceNow Incident / Event Raise", 3 alert-driven incident playbooks + 3 closed-incident override runbooks, and (admin-assigned) 3 SIR security playbooks + 3 SIR override runbooks. | Professional + `servicenow` (security playbooks also admin-assigned) |
+| **Agent templates** | "ServiceNow CMDB Lookup & Enrichment", "ServiceNow Incident / Event Raise", 3 alert-driven incident agent templates + 3 closed-incident override runbooks, and (admin-assigned) 3 SIR security agent templates + 3 SIR override runbooks. | Professional + `servicenow` (security agent templates also admin-assigned) |
 | **Transport** | Per-Org: **direct REST** *or* a **ServiceNow MCP server** (Action Fabric / Console-built). Same logical tools either way. | REST → `servicenow`; MCP → `servicenow-mcp` |
 
 ---
@@ -48,7 +48,7 @@ ServiceNow incidents, and writes the incident number **back** to the originating
 
 All of these are enforced **in code/config, never by trusting the model**.
 
-- **Never-hang [most important].** A slow or down ServiceNow can never block the Ask loop, the
+- **Never-hang [most important].** A slow or down ServiceNow can never block a run, the
   browser, or the backend runner. Per-call connect/read timeouts (defaults 5 s / 20 s, conf knobs),
   bounded retries on 429/5xx honouring `Retry-After`, terminal `401/403/404` (no retry-loop), and a
   circuit-aware "skip-and-note" degrade that **lowers verdict confidence rather than failing**.
@@ -89,7 +89,7 @@ Key settings:
 | `write_allowlist` / `write_field_allowlist` | Physical CMDB tables (and optionally columns) `cmdb_upsert` may write. **Default deny-all.** |
 | `on_closed_incident` / `closed_lookback_window` | Policy when a re-fire matches a closed incident — `new_linked` (default) / `reopen` / `suppress` — see §7. |
 | `sir_enabled` | Advertise the SIR (`sn_si_incident`) tools. |
-| `security_playbooks_enabled` + assignment list | Explicitly enable + assign the SIR security playbooks (off by default — §8). |
+| `security_playbooks_enabled` + assignment list | Explicitly enable + assign the SIR security agent templates (off by default, §8). The key keeps its original name. |
 | `logical_tool_map` | (MCP) logical `sn.*` id → imported MCP tool name (§6). |
 | `severity_mapping` | Per-Org override of the Splunk/ITSI/ES severity → impact/urgency mapping. |
 
@@ -104,7 +104,7 @@ Use **Test connection** to validate auth + detect the instance release.
 
 Credentials live in `storage/passwords` (realm `itmip_llm_assistent_app`) and never reach the
 browser. Supported on the **REST** transport: Basic (service account), static token / API key,
-OAuth 2.0 (via the shipped runtime, REST `/oauth_token.do`), and — for IAM-gated instances — the
+`oauth2` (sends an OAuth access token you store yourself as a bearer token; see §4.2), and, for IAM-gated instances, the
 shared **customer-auth hook** (`customer_authorisation.py`, `target_kind="tool"`), which composes
 **on top** of the static credential (hook wins per header; fail-closed on hook failure). See
 [the customer authorisation hook guide](../security/customer-authorisation-hook.md).
@@ -208,25 +208,21 @@ A Table API policy never covers these, and each needs permitting separately:
 | Aggregates | `/api/now/stats/{table}` |
 | Attachments | `/api/now/attachment` |
 
-#### 5. How to confirm it is right, in one command
+#### 5. How to confirm it is right
 
-Do not accept "it is configured" without this. It exits non-zero if anything
-required is unreachable, and names which layer to fix:
+Do not accept "it is configured" without this. Store the key (section 4.1), save
+the connection, and run **Tools → ServiceNow → Test connection**. It probes every
+table group with the stored credential and names which layer to fix (see "The
+product will tell you" below).
 
-```
-python3 tools/check_servicenow_access.py \
-  --instance https://CUSTOMER.service-now.com \
-  --apikey 'THE_KEY' --read-back
-```
+Expect every required group to read `yes`. Two results specifically do **not**
+mean success:
 
-Expect every required table `200 ok`. Two results specifically do **not** mean
-success:
+- `yes, but no rows from … (check roles)`: the policy is right and a **role** is missing
+- `denied: …`: the **policy** is missing, not the key
 
-- `200, 0 rows` — the policy is right and a **role** is missing
-- `401` — the **policy** is missing, not the key
-
-`--read-back` additionally confirms `work_notes` can be read back, which should
-pass on the required tables alone with no journal access.
+To confirm `work_notes` can be read back, see section 7.1. It should work on the
+required tables alone, with no journal access.
 
 ### 4.1 Storing the credential — exact syntax
 
@@ -327,7 +323,7 @@ each authentication type:
 | `basic` | `username:password` (one string, with the colon) | `Authorization: Basic <base64 of what you stored>` |
 | `bearer` | the token on its own | `Authorization: Bearer <secret>` |
 | `header` | the API key on its own | a header named by `auth_header_name`, default `x-sn-apikey` |
-| `oauth2` | a bearer token, until full OAuth resolution lands | `Authorization: Bearer <secret>` |
+| `oauth2` | a current OAuth access token. The app does not request or refresh it from ServiceNow, so replace it before it expires | `Authorization: Bearer <secret>` |
 
 For `basic`, the app base64-encodes **whatever you stored, unchanged**. If you
 store only the password, the header is malformed and ServiceNow answers 401 with
@@ -380,6 +376,11 @@ Read the status code and you know which layer to go to:
 | **401** "User is not authenticated" | no policy covers this endpoint | fix the **policy** |
 | **403** "User Not Authorized" | authenticated, ACL refused | grant a **role** |
 | **400** "Invalid table" | table not on this instance | nothing — the plugin is not activated |
+| **200 with a web page** (`servicenow_instance_hibernating`) | a developer instance is asleep and answers every call with its hibernation page | wake it from the ServiceNow developer portal, then run again |
+| **200 with a body that is not JSON** (`servicenow_non_json_response`) | something other than the Table API answered: a login page, a proxy | check the instance URL and anything between Splunk and ServiceNow |
+
+Adjutant never reads a page like that as data. A run, a reconciliation read, a publication read-back
+or a delete that gets one fails with the error above. It is never reported as an empty table.
 
 A 403 next to a wall of 401s is a useful hint that the credential authenticates
 somewhere, but do not lean on it: some system tables answer 401 even to a full
@@ -393,10 +394,11 @@ fault, stop reasoning about status codes and remove one variable. Basic auth
 needs no Access Policy on a default instance:
 
 ```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --basic 'admin:PASSWORD'
+curl -s -o /dev/null -w '%{http_code}\n' -u 'admin:PASSWORD' \
+  'https://YOUR_INSTANCE.service-now.com/api/now/table/incident?sysparm_limit=1'
 ```
+
+Repeat it for any other table that answered 401 with the key.
 
 - **Tables return 200** — the instance, the tables and the data are all fine, so
   the fault is entirely in the API key's Access Policy. You can also demo on
@@ -482,7 +484,7 @@ not from memory.
 
 | Table | Access | Used by |
 |---|---|---|
-| `incident` | read + write | incident read, create, update, the triage playbooks |
+| `incident` | read + write | incident read, create, update, the triage agent templates |
 | `problem` | read | problem read |
 | `change_request` | read | change read |
 | `task` | read | parent class of the above; some dot-walks resolve through it |
@@ -504,10 +506,10 @@ not from memory.
 | `cmdb_ci_netgear` | read | network gear |
 | `service_offering` | read | service offering |
 
-CMDB **writes** additionally require the specific physical tables you list in the
-connection's *CMDB write allowlist*. That allowlist is deny-all when empty, so a
-table must appear in BOTH the ServiceNow policy and the allowlist before a write
-is possible.
+CMDB **writes** additionally require the specific physical tables you add to the
+connection's *CMDB write allowlist*, one table per entry (for example `cmdb_ci_server`).
+That allowlist is deny-all when empty, so a table must appear in BOTH the ServiceNow
+policy and the allowlist before a write is possible.
 
 **Security incidents (SIR)** — only when *SIR enabled* is ticked:
 
@@ -538,13 +540,15 @@ decommission that caused an outage is exactly the event you will fail to find.
 table read unless `sysparm_display_value` is `true` or `all`. Send that and the
 text comes back on the record, with no access to `sys_journal_field` required.
 Do not grant the journal table to fix an empty `work_notes`: see section 7.1 for
-the one case that genuinely needs it. Confirm which situation you are in:
+the one case that genuinely needs it. Confirm which situation you are in by
+reading an incident that has notes, with the same key:
 
 ```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --apikey 'your_api_key' --read-back
+curl -s -H 'x-sn-apikey: your_api_key' \
+  'https://YOUR_INSTANCE.service-now.com/api/now/table/incident?sysparm_query=number=INC0010001&sysparm_fields=number,work_notes&sysparm_display_value=true'
 ```
+
+If `work_notes` comes back with text, nothing more is needed.
 
 **Event creation is NOT a table.** `servicenow_create_event` posts to
 `/api/global/em/jsonv2`, the Event Management API. A table policy will not cover
@@ -611,24 +615,12 @@ cannot test it and a table policy does not grant it.
 
 #### Check a key before wiring it up
 
-```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --apikey 'your_api_key'
-```
-
-It prints one row per table with the status code and which layer to fix, and
-exits non-zero if any required table is unreachable. Add `--read-back` to also
-check whether `work_notes` can be read, not just written.
-
-To test the credential the app is actually using rather than one pasted into a
-shell, drop `--apikey` and let it read `storage/passwords` directly:
-
-```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --conn servicenow_prod --splunk-password 'YOUR_SPLUNK_PASSWORD'
-```
+Store the key (section 4.1), point the connection at it, and run **Test
+connection**. It reads the secret from `storage/passwords` the same way the tools
+do, so it tests the credential the app will actually use rather than one pasted
+into a shell. Each row names the tables it could not read; the status-code table
+above tells you which layer to fix. To check that `work_notes` can be read, not
+just written, use the `curl` read under "The tables, by feature".
 
 If **every** table returns 401, including one that worked previously, that is a
 policy that was replaced or deactivated rather than a bad credential. Both report
@@ -636,13 +628,8 @@ policy that was replaced or deactivated rather than a bad credential. Both repor
 
 To separate "is the integration correct" from "is the policy correct" while you
 are still sorting the policy out, basic auth needs no Access Policy at all on a
-default instance:
-
-```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --basic 'user:password'
-```
+default instance. Use the `curl` check under "The decisive test: try basic auth"
+above.
 
 ### 4.3 If it does not authenticate
 
@@ -663,21 +650,15 @@ Work through these in order; each rules out one layer.
 5. **Case.** For `per_tenant` and `per_user` the derived name is lower-cased.
 6. **Is it the policy rather than the credential?** With an API key this is the
    most likely answer once 1 to 5 are ruled out, and it looks identical from
-   here. Run the checker in section 4.2b: if some tables answer and others 401,
+   here. Run **Test connection** (section 4.2b): if some tables answer and others 401,
    the key is valid and the policy is too narrow. If a table returns **403**
    while its neighbours return 401, that settles it — 403 means the credential
    authenticated and only an ACL refused it, so the key is definitely fine.
 
-**Shortcut.** Rather than working down this list by hand, run:
-
-```
-python3 tools/check_servicenow_access.py \
-  --instance https://YOUR_INSTANCE.service-now.com \
-  --conn servicenow_prod --splunk-password 'YOUR_SPLUNK_PASSWORD'
-```
-
-Reading the secret from `storage/passwords` tests steps 1 to 3 implicitly: if it
-cannot find the credential, the name, realm or app context is wrong.
+**Shortcut.** Run **Test connection** first. It reads the secret from
+`storage/passwords` exactly as the tools do. If every table is denied, check
+steps 1 to 3 before the policy: a credential the app cannot find sends no
+`Authorization` header, and that looks exactly like a policy failure.
 
 On the **MCP** transport, auth is the MCP server's own OAuth, handled by the shipped client — see
 [the MCP OAuth guide](../tools/mcp-oauth.md). **ServiceNow REST and ServiceNow MCP are separate connections with
@@ -704,23 +685,23 @@ The highest-value question is a **relationship-graph** question, answered by
 Traversals are **depth- and breadth-bounded** (max hops / max nodes); an over-limit walk returns a
 partial graph + a "truncated" note, never hangs. A class missing from the Org's CSDM version is
 reported, not guessed. The CSDM map ships as curated knowledge and is also exposed through the
-`servicenow-cmdb` knowledge connector; a live overlay of the customer's own `u_*` classes is the
-production enhancement (the static map is the never-hang fallback).
+`servicenow-cmdb` knowledge connector. The map is static: it does not read your instance's own
+custom (`u_*`) classes.
 
 ---
 
 ## 6. Two transports — REST or MCP (per Org)
 
-Playbooks, knowledge and skills are written against **logical ServiceNow tool ids**
+Agents, knowledge and skills are written against **logical ServiceNow tool ids**
 (`sn.get_incidents`, `sn.create_incident`, `sn.cmdb_get_records`, …). A per-Org **capability map**
 resolves each logical id to whatever is wired:
 
 - **REST Org** → the built-in `servicenow_*` tools (this page).
 - **MCP Org** → an **imported MCP tool**, via the admin-edited `logical_tool_map` (because MCP tool
   names differ per vendor). An **unmapped** logical id is reported *unavailable* for that Org
-  (graceful — the playbook says so in `missing_context`, never errors).
+  (graceful: the agent says so in `missing_context`, never errors).
 
-Switching an Org's `transport` changes **no** playbook, knowledge entry, or skill. On the
+Switching an Org's `transport` changes **no** agent, knowledge entry, or skill. On the
 MCP transport Adjutant AI still enforces its own governance **in Adjutant AI, never delegated to the
 MCP server**: the never-hang bound, the write allowlist, write-target binding, and the deterministic
 description render all still apply; `stdio` MCP servers are rejected. A generic MCP-server
@@ -734,13 +715,13 @@ integration is richer — never a refusal.
 The flagship value is turning a Splunk/ITSI/ES alert into a **rich, readable** ServiceNow incident
 and **writing the number back** — the round-trip stock one-directional integrations skip.
 
-**Flow (per alert-driven playbook).** Alert fires → the backend run enriches (Splunk context +
+**Flow (per alert-driven agent).** Alert fires → the backend run enriches (Splunk context +
 optional CMDB owner/criticality/Business-Service) → the LLM emits the structured content object →
 the **renderer** produces the plain-text description → coded fields are resolved label→code → the
 incident is **created or updated** → the number is written **back** to the originating object.
 
 **Idempotency — two keys, two jobs.**
-- A **run-id-independent correlation key** `aiwb:<source_type>:<source_object_id>[:<playbook>]` is
+- A **run-id-independent correlation key** `aiwb:<source_type>:<source_object_id>[:<playbook>]` (where `<playbook>` is the agent's name) is
   stamped on the incident's `correlation_id` and queried before writing. A genuine **re-fire** (a new
   run) finds and **updates the same incident** instead of spawning a duplicate.
 - A **`(run_id, step_id)` failover marker** on each write stops a runner that died mid-write from
@@ -762,7 +743,7 @@ override runbooks):
 | `reopen` | Attempt to reopen; if ServiceNow refuses (business rule / ACL), **fall back to `new_linked`** and record it. |
 | `suppress` | Within a lookback window, do nothing in ServiceNow (annotate Splunk only); outside it, behave as `new_linked`. |
 
-The three shipped playbooks are: **ServiceNow Incident from Splunk Alert / ITSI Episode / ES Notable**.
+The three shipped agent templates are: **ServiceNow Incident from Splunk Alert / ITSI Episode / ES Notable**.
 The override runbooks are **ServiceNow Closed-Incident: Create New / Reopen / Suppress**.
 
 ### 7.1 Reading work notes and comments
@@ -837,9 +818,9 @@ fallback.
 
 **SIR is opt-in twice:**
 1. The Org connection must set **`sir_enabled`** (else the SIR tools are not advertised).
-2. The **security playbooks are NEVER auto-assigned.** A (sc)admin must set
-   `security_playbooks_enabled` **and** explicitly assign each security playbook to the Org/BU. The
-   security playbooks (**Security Incident from ES Notable / Splunk Alert / ITSI Episode**) and their
+2. The **security agent templates are NEVER auto-assigned.** A (sc)admin must set
+   `security_playbooks_enabled` **and** explicitly assign each security agent template to the Org/BU. The
+   security agent templates (**Security Incident from ES Notable / Splunk Alert / ITSI Episode**) and their
    SIR override runbooks are neither advertised nor runnable until then.
 
 ---
@@ -867,24 +848,32 @@ association.
 
 Gated on **two dimensions** (both must hold): edition **AND** feature presence.
 
-- **`servicenow`** (Professional) — all REST tools, knowledge, playbooks, and the ITSM playbooks.
+- **`servicenow`** (Professional): all REST tools, knowledge, agent templates, and the ITSM agent templates.
 - **`servicenow-mcp`** (Professional) — the MCP transport. A deliberate **carve-out**: the dedicated
   ServiceNow-connection MCP path is reachable at Professional **without** the Enterprise `mcp_servers`
   capability, while a *generic* (non-ServiceNow) MCP server still requires `mcp_servers` (Enterprise).
 
+**ServiceNow as an integration destination is Enterprise.** Writing to ServiceNow from an integration
+flow, a mapping or a scheduled integration needs the `data_integration` capability (Enterprise and
+MSP, from 2.7.0). The tools above keep their own `servicenow` / `servicenow-mcp` licence.
+
+**ServiceNow Subscription Units.** Configuration items an integration creates in the CMDB are created
+outside ServiceNow ITOM Discovery and Visibility. Under ServiceNow's licensing such CIs can count
+towards your ServiceNow Subscription Units. Check with your ServiceNow account team before an
+integration creates CIs at scale.
+
 Tools carry a `min_feature` gate and are hidden unless the Org both holds the feature **and** has an
-active connection; playbooks carry a parallel `required_feature` gate (server-enforced, fail-closed).
+active connection; agents carry a parallel `required_feature` gate (server-enforced, fail-closed).
 See the licensing reference.
 
 ---
 
 ## 11. Out of scope (conscious deferrals)
 
-Other ServiceNow REST APIs (Aggregate, Import Set, GraphQL, Scripted REST; **Attachment** is a
-fast-follow), **full continuous lifetime state-sync** (the create-time round-trip IS in scope — the
+Other ServiceNow REST APIs (Aggregate, Import Set, GraphQL, Scripted REST, Attachment), **full continuous lifetime state-sync** (the create-time round-trip IS in scope; the
 ongoing mirror of every later ServiceNow status change is not), a dedicated notable/episode *field*
 write (needs a new backend allowlist action; comment + index report is the shipped path),
-client-credentials OAuth for ServiceNow MCP (ServiceNow roadmap), rich HTML/Markdown descriptions
+client-credentials OAuth for ServiceNow MCP (ServiceNow does not offer it), rich HTML/Markdown descriptions
 (plain text is the committed default), exposing the whole Action Fabric catalog as free tools, and
 `stdio` MCP servers.
 
@@ -895,7 +884,7 @@ client-credentials OAuth for ServiceNow MCP (ServiceNow roadmap), rich HTML/Mark
 - [the tool catalogue](../tools/tool-catalogue.md) — tool model, custom-HTTP tools, the IAM hook, MCP servers.
 - [the MCP OAuth guide](../tools/mcp-oauth.md) — OAuth for MCP servers (the ServiceNow MCP transport).
 - [the customer authorisation hook guide](../security/customer-authorisation-hook.md) — WebEAM / IAM gateway auth.
-- the Backend Ask Service guide — the unattended engine the ServiceNow playbooks ride.
+- the unattended runs guide: the agent runner that runs the ServiceNow agent templates.
 - the knowledge-layer guide — curated entries + connectors (the CSDM map).
 - the licensing reference — editions + named features.
-- [the tools and playbooks overview](../tools/tools-and-playbooks.md) — the full tool/playbook catalogue.
+- [the tools and agent templates overview](../tools/tools-and-playbooks.md): the full tool and agent catalogue.

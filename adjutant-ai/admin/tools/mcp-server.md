@@ -2,18 +2,18 @@
 sidebar_position: 10
 ---
 
-# Adjutant AI — inbound MCP server (playbooks over MCP)
+# Adjutant AI: inbound MCP server (agents over MCP)
 
-**App version:** 2.5.9  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk
-admins publishing Adjutant AI playbooks to other AI agents.
+**App version:** 2.7.0  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk
+admins publishing Adjutant AI's governed agents to other AI agents.
 
 Adjutant AI exposes a small set of tools over the Model Context Protocol so an external AI
-agent — or Splunk's own MCP Server — can discover and run your governed playbooks with a
+agent, or Splunk's own MCP Server, can discover and run your governed agents with a
 **fire‑and‑poll** pattern: start returns a `run_id` immediately, then two fast read‑only tools
 report progress and return the verdict.
 
 > **Use Splunk's MCP Server.** On any estate that has **Splunk_MCP_Server ≥ 1.2**, that is the
-> route to use, and the app registers the playbook tools into it automatically. It is Splunk's
+> route to use, and the app registers the four Adjutant tools into it automatically. It is Splunk's
 > own supported surface, it is where an agent already looks for Splunk tools, and it gives you
 > one endpoint, one token audience and one place to govern access instead of a second server to
 > expose and maintain. The app's **standalone** endpoint is a **compatibility fallback**, for
@@ -22,37 +22,44 @@ report progress and return the verdict.
 
 | Tool | Args | Does |
 |---|---|---|
-| `adjutantai_list_playbooks` | `org_bu` (e.g. `TDDD/SFIT`) | Lists the **MCPready‑tagged** playbooks visible to that Org/BU. |
-| `adjutantai_start_playbook` | `org_bu`, `playbook_name` | Enqueues an **unattended** run through the governed Backend Ask Service; returns a `run_id` **immediately** (does not wait). |
-| `adjutantai_get_playbook_status` | `org_bu`, `run_id` | Read‑only. Returns `queued` / `running` / `completed` / `failed` (+ `retrying`/`attempts`/`partial`). |
-| `adjutantai_get_playbook_results` | `org_bu`, `run_id`, `format?` | Read‑only. Returns the verdict once `completed`; `format=summary` (default) or `full`. |
+| `adjutantai_list_agents` | `org_bu` (e.g. `ACME/OPS`) | Lists the agents tagged **`MCPready`** (published to MCP) that are visible to that Org/BU. |
+| `adjutantai_start_agent` | `org_bu`, `playbook_name` | Starts an agent run through unattended runs (called the Backend Ask Service in earlier documents); returns a `run_id` **immediately** (does not wait). |
+| `adjutantai_get_agent_status` | `org_bu`, `run_id` | Read‑only. Returns `queued` / `running` / `completed` / `failed` (+ `retrying`/`attempts`/`partial`). |
+| `adjutantai_get_agent_results` | `org_bu`, `run_id`, `format?` | Read‑only. Returns the verdict once `completed`; `format=summary` (default) or `full`. |
+
+Before 2.7.0 the four tools were called `adjutantai_list_playbooks`, `adjutantai_start_playbook`,
+`adjutantai_get_playbook_status` and `adjutantai_get_playbook_results`. The old names are gone, with
+no aliases: an upgraded instance removes them from Splunk's MCP Server on the registrar's next
+pass, and the standalone endpoint answers them as an unknown tool. **Reconfigure any MCP client
+that used them.** The `playbook_name` argument keeps its name; it takes the agent's name.
 
 > The pre‑1.8.4 name `adjutantai_run_playbook` has been **removed** (it had no consumers) — use
-> `adjutantai_start_playbook`, which does exactly the same thing (starts asynchronously, returns
+> `adjutantai_start_agent`, which does exactly the same thing (starts asynchronously, returns
 > a `run_id` immediately — it was never a "run and wait" tool). The reconciler
 > **de‑registers** any lingering `run_playbook` from Splunk's MCP Server automatically on its
 > next tick.
 
-**Why start/status/results instead of one blocking run?** A playbook can take several minutes,
+**Why start/status/results instead of one blocking run?** An agent run can take several minutes,
 but MCP tool calls face multiple independent timeouts none of which you control on a customer
 deployment — the Splunk MCP Server's 60‑second guardrail, the MCP client's per‑request timeout,
 HTTP intermediaries (load balancers/proxies), and the orchestrating LLM's own patience. So every
 Adjutant tool call completes in **seconds** and the agent polls. Raising the MCP Server guardrail
 is **not required**.
 
-Only playbooks you tag **`MCPready`** are ever exposed. **Starting** a run requires the Backend
-Ask Service (`[agent_runner] enabled=1`) and an **admin** caller; the read‑only **status/results**
-tools require only that you are authorized for the run's Org/BU (admin, same‑tenant, or the run's
-owner) — a run started by one tenant is never readable by another (`SEC-3`). Run records expire
+Only agents whose **Published to MCP** agent mode is on (**Agents** tab → **Edit** → **Agent
+modes**) are ever published to MCP. **Starting** a run requires unattended
+runs to be enabled (`[agent_runner] enabled=1`) and an **admin** caller; the read‑only **status/results**
+tools require only that you are authorized for the run's Org/BU (admin, a caller in the same Org/BU,
+or the run's owner). A run started in one Org/BU is never readable from another. Run records expire
 after `[agent_runner] queue_retention` (default 7 days); an expired `run_id` returns not‑found.
 
-> **Ships with one example.** A read‑only reference playbook, **`MCP Example: Read-only
+> **Ships with one example.** A read‑only reference agent template, **`MCP Example: Read-only
 > Health Check`**, is seeded on every install (scope `DFLT/DFLT`, `sharing=global`, all
-> licence tiers, tagged `MCPready`). So the moment you switch the server on,
-> `adjutantai_list_playbooks` returns something for **any** valid Org/BU — you don't have to
-> tag one of your own first. It performs no writes; running it still needs `[agent_runner]=1`.
+> licence tiers, with Published to MCP on). So the moment you switch the server on,
+> `adjutantai_list_agents` returns something for **any** valid Org/BU — you don't have to
+> switch the mode on for one of your own first. It performs no writes; running it still needs `[agent_runner]=1`.
 > The Org/BU you pass must be a **registered business unit** (`itmip_business_units`); an
-> unknown value returns `Unknown Org/BU …`. `TDDD/SFIT` in these docs is only a placeholder —
+> unknown value returns `Unknown Org/BU …`. `ACME/OPS` in these docs is only a placeholder:
 > use one of your real Org/BUs.
 
 ---
@@ -65,7 +72,7 @@ The whole surface is **disabled by default**. Turn it on in
 ```ini
 [mcp_server]
 enabled = 1
-# Register the playbook tools into Splunk's own MCP Server (Splunk_MCP_Server) if it is
+# Register the four Adjutant tools into Splunk's own MCP Server (Splunk_MCP_Server) if it is
 # installed, so they appear at the /services/mcp URL. Default 1 — LEAVE IT AT 1. This is
 # the preferred surface; setting it to 0 leaves only the standalone fallback endpoint.
 register_in_splunk_mcp = 1
@@ -93,7 +100,7 @@ tools are **not** registered anywhere.
 | Use it when | the estate has Splunk_MCP_Server ≥ 1.2 | it is absent, or older than 1.2 |
 
 ### A. Inside Splunk's own MCP Server (the `/services/mcp` URL) — **preferred**
-When `register_in_splunk_mcp = 1` (the shipped default), the app **auto‑registers** the playbook
+When `register_in_splunk_mcp = 1` (the shipped default), the app **auto‑registers** the four Adjutant
 tools as `api`‑type **custom tools** in `Splunk_MCP_Server` (via `POST /services/mcp_tools`), so
 they show up at `https://<host>:8000/<locale>/splunkd/__raw/services/mcp` next to
 `splunk_get_info`, `saia_*`, etc. The scripted input `bin/itmip_llm_mcp_register.py` reconciles
@@ -112,10 +119,11 @@ and new enough, the tools appear there on the next reconcile tick.
 > `index=_internal sourcetype=itmip_llm_mcp_register`) and registers nothing. Fall back to the
 > **standalone endpoint** (option B) until you upgrade Splunk_MCP_Server.
 >
-> Note the placeholder syntax is **dollar‑delimited `$arg$`** — the Splunk_MCP_Server docs
-> show `{{arg}}`, but its `tool_manager._substitute_placeholders` uses `$arg$`. Verified
-> end‑to‑end on **Splunk_MCP_Server 1.2.1** (a `tools/call adjutantai_list_playbooks`
-> with `org_bu` returns the playbook list via both `:8089` and the `:8000` web port).
+> Note the placeholder syntax is **dollar‑delimited `$arg$`**, although the Splunk_MCP_Server
+> docs show `{{arg}}`. The app's own registrations already use `$arg$`; if you register custom
+> tools of your own in Splunk_MCP_Server, write their placeholders the same way. Verified
+> end‑to‑end on **Splunk_MCP_Server 1.2.1** (a `tools/call` of the list tool
+> with `org_bu` returns the agent list via both `:8089` and the `:8000` web port).
 
 ### B. The standalone Adjutant MCP server — fallback, works on any Splunk
 Reach for this when `Splunk_MCP_Server` is **not installed** or is **older than 1.2**, or when an
@@ -131,7 +139,7 @@ target a plain HTTP JSON‑RPC endpoint at it. This is independent of Splunk's o
 Server and works regardless of its version, which is exactly why it exists.
 
 There is also a **flat REST** companion (used by option A and handy for scripts):
-`POST /services/itmip_llm/playbooks` with body
+`POST /services/itmip_llm/playbooks` (the path keeps its original name; it lists and runs agents) with body
 `{"action":"list"|"run","org_bu":"…","playbook_name":"…"}`.
 
 Both surfaces run the **same** governed code path and enforce the **same** gates (section 4), so
@@ -155,7 +163,7 @@ Settings → Tokens (Audience = `mcp`) or `POST /services/authorization/tokens` 
 
 When the tool executes, Splunk's MCP Server calls the app's `/services/itmip_llm/playbooks`
 endpoint **on the caller's behalf** — the caller's identity/roles carry through, so the same
-admin / Org‑BU / MCPready gates apply. Registering the tools needs the **`mcp_tool_admin`**
+admin / Org‑BU / `MCPready` gates apply. Registering the tools needs the **`mcp_tool_admin`**
 capability; the app's scripted input runs `passAuth = admin`, so no manual step is required.
 
 ### To the standalone Adjutant endpoint (option B, fallback)
@@ -175,10 +183,11 @@ on an estate that could otherwise use option A.
 ## 4. Governance (unchanged by where the tools are surfaced)
 
 Wherever the tools appear, the app enforces, server‑side:
-- **MCPready allowlist** — only `MCPready`‑tagged playbooks are listable/runnable.
-- **Org/BU safeguard** — admin may target any valid Org/BU; a tenant‑scoped caller only its own.
-- **Run gates** — `[agent_runner] enabled=1` **and** an admin caller; runs go through the
-  governed Backend Ask Service queue (default‑deny allowlist, write‑back contract).
+- **Published-to-MCP allowlist:** only agents with the Published to MCP mode on are listable and
+  runnable. The mode is stored as the tag `MCPready`, which is what the list filter checks.
+- **Org/BU safeguard:** admin may target any valid Org/BU; a caller scoped to one Org/BU only its own.
+- **Run gates:** `[agent_runner] enabled=1` **and** an admin caller; runs go through the
+  agent runner's queue (default‑deny allowlist, write‑back contract).
 
 ## 5. Files
 - `bin/itmip_llm_mcp_server.py` — JSON‑RPC MCP endpoint + the shared list/run/authorise logic.

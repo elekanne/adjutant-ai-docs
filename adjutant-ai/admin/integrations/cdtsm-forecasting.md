@@ -2,9 +2,9 @@
 sidebar_position: 13
 ---
 
-# CDTSM — Cisco Deep Time Series Model playbooks
+# CDTSM: Cisco Deep Time Series Model agent templates
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins and analysts setting up or running CDTSM forecasting
 and anomaly detection through Adjutant AI.
@@ -15,27 +15,27 @@ and anomaly detection through Adjutant AI.
 > It is enforced server-side at model-promotion time in
 > `bin/itmip_llm_mltk_share.py`, which refuses the privileged global-share
 > with **403 `Machine-learning workflows require a Professional or higher
-> license.`** below Professional; the CDTSM playbooks also drop out of the
-> Ask-tab picker below that tier. **CDTSM scoring / inference behaviour is
+> license.`** below Professional; the CDTSM agent templates also drop out of the
+> agent picker in the Console below that tier. **CDTSM scoring / inference behaviour is
 > unchanged** — the `apply CDTSM` command, its parameters, output columns,
 > and the proof-dashboard logic are exactly as documented below. See
 > the licensing reference for the full capability matrix.
 
-> CDTSM is Splunk AI Toolkit's **pre-trained, generative** time-series model (jointly Cisco-branded, feature preview in MLTK 5.7.3+). Unlike the existing AI Toolkit playbooks it needs **no per-metric training** — no `fit`, no model object, no `splunk_share_mltk_model_globally`. You just `... | timechart ... | apply CDTSM <field>` and get a forecast (or anomalies). Adjutant AI wraps this in three conversational playbooks that ship a saved search + proof dashboard (+ alert) with the AI Toolkit Forecast / Anomaly Detection charts and TrackMe feed-health.
+> CDTSM is Splunk AI Toolkit's **pre-trained, generative** time-series model (jointly Cisco-branded, feature preview in MLTK 5.7.3+). Unlike the existing AI Toolkit agent templates it needs **no per-metric training**: no `fit`, no model object, no `splunk_share_mltk_model_globally`. You just `... | timechart ... | apply CDTSM <field>` and get a forecast (or anomalies). Adjutant AI wraps this in three conversational agent templates (governed agents, with every action gated and logged) that ship a saved search + proof dashboard (+ alert) with the AI Toolkit Forecast / Anomaly Detection charts and TrackMe feed-health.
 
 ---
 
-## 1. The three playbooks — when to use which
+## 1. The three agent templates: when to use which
 
-| Playbook | Answers | Output |
+| Agent template | Answers | Output |
 |---|---|---|
 | **AI Toolkit – CDTSM Smart Forecasting** | "Where will this metric go in the next N hours?" | saved search + dashboard (Forecast Chart, confidence band) |
 | **AI Toolkit – CDTSM Anomaly Detection** | "Is the current behaviour of this metric surprising?" | saved search + dashboard (Anomaly Detection Chart, segments + bands) |
 | **AI Toolkit – CDTSM Predictive Alerting** | "Alert me *before* this metric crosses a threshold" | saved search + dashboard + scheduled alert (forecast-crosses-threshold). **Requires `power`/`admin`.** |
 
-All three appear in the Ask-tab picker **only when MLTK >= 5.7.3 is installed** (they declare `dependent_apps = [{Splunk_ML_Toolkit, 5.7.3}]`). They share the `cdtsm-discipline` skill, which carries the hard rules (fixed-resolution data, >=60 / <=30k points, mode-specific parameter exclusions, no model sharing, rate limit, on-prem dependency). They do **not** include the training-based skills (`ml-aiworkbench-naming-and-share`, `ml-data-readiness-precheck`, `ml-self-correct-budget`).
+All three appear in the agent picker in the Console **only when MLTK >= 5.7.3 is installed** (they declare `dependent_apps = [{Splunk_ML_Toolkit, 5.7.3}]`). They share the `cdtsm-discipline` skill, which carries the hard rules (fixed-resolution data, >=60 / <=30k points, mode-specific parameter exclusions, no model sharing, rate limit, on-prem dependency). They do **not** include the training-based skills (`ml-aiworkbench-naming-and-share`, `ml-data-readiness-precheck`, `ml-self-correct-budget`).
 
-CDTSM is **additive** — the nine existing AI Toolkit playbooks still serve data that doesn't fit CDTSM (sparse, < 60 points, irregular resolution) or use cases that need training-based models (categorical outliers, classification).
+CDTSM is **additive**: the nine existing AI Toolkit agent templates still serve data that doesn't fit CDTSM (sparse, < 60 points, irregular resolution) or use cases that need training-based models (categorical outliers, classification).
 
 ---
 
@@ -49,7 +49,7 @@ CDTSM is **additive** — the nine existing AI Toolkit playbooks still serve dat
 | Rate limit | ~50 req/min (beta, AI-Toolkit-managed) | whatever the CTS server is provisioned for |
 | Cost | no extra cost during beta | your GPU/CPU infra |
 
-The playbooks handle both transparently; only the deliverable advisory text differs. Run `splunk_check_cdtsm_availability` (read-only tool) to see exactly which prerequisites are met.
+The agent templates handle both transparently; only the deliverable advisory text differs. Run `splunk_check_cdtsm_availability` (read-only tool) to see exactly which prerequisites are met.
 
 ---
 
@@ -159,7 +159,7 @@ From the MLTK 5.7.3 implementation (`cdtsm_pkg/constants.py` → `EXPECTED_PARAM
 
 ## 7. Proof dashboard & verification (trustworthy to a non-specialist)
 
-Every CDTSM playbook ships a **proof dashboard** whose job is to let a user who knows no ML decide whether to trust the result. The mechanism differs by mode: forecasting has a ground truth (the future eventually arrives, so you can backtest), anomaly detection does not (no labels), so it is proven indirectly.
+Every CDTSM agent template ships a **proof dashboard** whose job is to let a user who knows no ML decide whether to trust the result. The mechanism differs by mode: forecasting has a ground truth (the future eventually arrives, so you can backtest), anomaly detection does not (no labels), so it is proven indirectly.
 
 ### 7.1 Output columns — exact names
 
@@ -248,26 +248,26 @@ CDTSM is **not** implemented in Adjutant AI. The model and the `apply CDTSM` SPL
 
 | Layer | Artifact | Role |
 |---|---|---|
-| Playbooks | 3 seed playbooks in `src/services/useCases.ts` (`SEED_TEMPLATES`) | Conversational guides: gather intent through a plain-language questionnaire, then have the LLM compose the correct `apply CDTSM` SPL, create the saved search + proof dashboard (+ alert), and self-verify. |
-| Skill | `cdtsm-discipline` in `src/services/skillSeeds.ts` | The hard rules (parameters, constraints, exact output columns, viz options, verification, no model sharing) injected into each playbook's assembled prompt. |
-| Tool | `splunk_check_cdtsm_availability` in `src/services/tools.ts` | Read-only preflight: MLTK version, Cloud-vs-on-prem, `list_tokens_scs`, and the on-prem `[CTSM]` endpoint config. |
+| Agent templates | 3 agent templates: CDTSM Smart Forecasting, CDTSM Anomaly Detection and CDTSM Predictive Alerting | Conversational guides: gather intent through a plain-language questionnaire, then have the LLM compose the correct `apply CDTSM` SPL, create the saved search + proof dashboard (+ alert), and self-verify. |
+| Skill | `cdtsm-discipline` | The hard rules (parameters, constraints, exact output columns, viz options, verification, no model sharing) injected into each agent's assembled prompt. |
+| Tool | `splunk_check_cdtsm_availability` | Read-only preflight: MLTK version, Cloud-vs-on-prem, `list_tokens_scs`, and the on-prem `[CTSM]` endpoint config. |
 
 That is the entire footprint — three seeds and one read-only tool, all frontend. There is **no** new Python REST handler, **no** new KVStore collection, and **no** new outbound network egress from Adjutant AI.
 
 ### 8.2 Runtime path (one forecast)
 
-1. The user opens the assistant inside their own app, picks a CDTSM playbook, fills the guided form, and sends.
-2. The LLM (browser-direct or splunk_proxy) runs the playbook loop, calling the **existing** tools over **browser -> splunkd REST**: `splunk_list_apps` (gate on MLTK >= 5.7.3), `splunk_check_cdtsm_availability`, `splunk_run_search`, `splunk_create_saved_search`, and the Simple XML builder chain `splunk_xml_create -> splunk_xml_add_input -> splunk_xml_add_panel x N -> splunk_xml_publish` (`_publish` still persists through the same `create_dashboard_xml` guardrails).
+1. The user opens the assistant inside their own app, picks a CDTSM agent, fills the guided form, and sends.
+2. The LLM (browser-direct or splunk_proxy) runs the agent loop, calling the **existing** tools over **browser -> splunkd REST**: `splunk_list_apps` (gate on MLTK >= 5.7.3), `splunk_check_cdtsm_availability`, `splunk_run_search`, `splunk_create_saved_search`, and `splunk_create_dashboard_xml` for the proof dashboard.
 3. When a saved search runs, **splunkd** executes `… | apply CDTSM …`, which hands off **inside MLTK** (`cdtsm_pkg`) to the model provider:
    - **Splunk Cloud** -> Splunk-hosted GPUs (the SCS provider); caller needs `list_tokens_scs`.
    - **On-premise** -> the customer-run open-source **CTS server** (FastAPI, `POST /cdtsm/v1/ai/infer`), selected because `mlspl.conf [CTSM] self_hosted_cdtsm_endpoint` is set; the bearer token is read from `storage/passwords` realm `aitk_fm_tokens`, name `CDTSM_AUTH_TOKEN`.
-4. The forecast / anomaly columns return to the saved search; the LLM builds the proof dashboard via the Simple XML builder (`splunk_xml_create -> splunk_xml_add_input -> splunk_xml_add_panel x N -> splunk_xml_publish`, the AI Toolkit Forecast / Anomaly custom viz + the holdback backtest, §7) and delivers a plain-language summary.
+4. The forecast / anomaly columns return to the saved search; the LLM writes the proof dashboard XML by hand and publishes it with `splunk_create_dashboard_xml` (the AI Toolkit Forecast / Anomaly custom viz + the holdback backtest, §7; the Simple XML builder cannot place a custom viz, so the templates do not use it here) and delivers a plain-language summary.
 
 ### 8.3 Why it is additive and gated
 
-- **Gating** — the playbooks declare `dependent_apps = [{Splunk_ML_Toolkit, 5.7.3}]`, so they appear in the Ask picker **only** when MLTK >= 5.7.3 is installed; on a box without MLTK, CDTSM is simply invisible (no errors). Predictive Alerting also sets `required_roles = [power, admin]` (alert creation).
-- **No training, no model object** — unlike the nine training-based AI Toolkit playbooks (StateSpaceForecast, DensityFunction, …), CDTSM is pre-trained: no `fit`, no `into <model>`, no `splunk_share_mltk_model_globally`. The `cdtsm-discipline` skill enforces this.
-- **Trust boundary** — the model call belongs to MLTK, not to Adjutant AI. Adjutant AI's own boundary stays exactly what it was: browser <-> splunkd REST plus the LLM channel. The on-prem CTS hop (splunkd -> CTS server) is described in the architecture overview §3.12.
+- **Gating.** The agent templates declare `dependent_apps = [{Splunk_ML_Toolkit, 5.7.3}]`, so they appear in the agent picker in the Console **only** when MLTK >= 5.7.3 is installed; on a box without MLTK, CDTSM is simply invisible (no errors). Predictive Alerting also sets `required_roles = [power, admin]` (alert creation).
+- **No training, no model object.** Unlike the nine training-based AI Toolkit agent templates (StateSpaceForecast, DensityFunction, …), CDTSM is pre-trained: no `fit`, no `into <model>`, no `splunk_share_mltk_model_globally`. The `cdtsm-discipline` skill enforces this.
+- **Trust boundary.** The model call belongs to MLTK, not to Adjutant AI. Adjutant AI's own boundary stays exactly what it was: browser <-> splunkd REST plus the LLM channel. The on-prem CTS hop (splunkd -> CTS server) is MLTK's own traffic and is configured in `mlspl.conf [CTSM]`, not in Adjutant AI.
 
 ---
 

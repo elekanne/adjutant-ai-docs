@@ -4,7 +4,7 @@ sidebar_position: 15
 
 # Auditing — what Adjutant AI logs, and how to configure real audit logging
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins provisioning audit logging, and the auditors who read it.
 
@@ -19,7 +19,7 @@ Adjutant AI can send the content a user types — and the objects they attach �
 
 This document covers (a) what is logged **today**, and (b) the **indexes you must provision** and the **choices you must make** to turn on the full audit.
 
-> **Licence requirement (v1.4.1): real audit logging is an Enterprise feature.** It was Professional+ in 1.3.0–1.4.0; from v1.4.1 it is gated by the per-feature **capability matrix** as `audit_logging` = **Enterprise**. The gate is **automatic and server-authoritative**: the effective licence tier resolves to a `capabilities` map (`GET /services/itmip_llm/license`), and the audit write path is gated at **`bin/itmip_llm_tenancy.py`** (the audit gate). The **Audit tab auto-hides below Enterprise** in the UI, and the per-Org **Audit logging** config section (§6) is only offered when the tier includes `audit_logging`. Below Enterprise no audit events are written. (Downgrade hides/refuses — it never deletes already-written audit events in the index; those persist per the index's own retention.) See the architecture overview, §3.14 and the rights and roles reference, §2a for the matrix.
+> **Licence requirement (v1.4.1): real audit logging is an Enterprise feature.** It was Professional+ in 1.3.0–1.4.0; from v1.4.1 it is gated by the per-feature **capability matrix** as `audit_logging` = **Enterprise**. The gate is **automatic and server-authoritative**: the effective licence tier resolves to a `capabilities` map (`GET /services/itmip_llm/license`), and the audit write path is gated at **`bin/itmip_llm_tenancy.py`** (the audit gate). The **Audit tab auto-hides below Enterprise** in the UI, and the per-Org **Audit logging** config section (§6) is only offered when the tier includes `audit_logging`. Below Enterprise no audit events are written. (Downgrade hides/refuses: it never deletes already-written audit events in the index; those persist per the index's own retention.) See [the admin manual, per-feature licensing](../admin-manual.md#per-feature-licensing) and the rights and roles reference, §2a for the matrix.
 
 ---
 
@@ -27,14 +27,14 @@ This document covers (a) what is logged **today**, and (b) the **indexes you mus
 
 | Signal | Where | Retention | Notes |
 |---|---|---|---|
-| **Token & cost usage** | metrics index (macro `ai_assistant_metrics_index`, default `main`), `sourcetype=ai_assistant_usage` | operator-set | Fields: `ai_user`, `ai_model`, `ai_provider`, `ai_org`, `ai_bu`, `ai_llm_name`, `ai_app`. **No prompt/answer content, no playbook, no consent.** Surfaced in the **Tokens & Costs** tab. |
-| **Conversation history** | `itmip_user_history` (KVStore) | user-deletable | Per-user: question text, playbook name, the LLM's reasoning, attachment names, artifacts. **The History tab is per-user — an admin cannot read another user's history through the app.** Writes are mirrored to `itmip_changes`. |
-| **KVStore changelog** | `itmip_changes` index, `sourcetype=itmip:kvstore:change` | **60 days** | Every create/update/delete on tracked collections (playbooks, tools, MCP, configs, orgs, history, …) with `before`/`after`. Built for **KVStore restore**, not legal hold. |
+| **Token & cost usage** | metrics index (macro `ai_assistant_metrics_index`, default `main`), `sourcetype=ai_assistant_usage` | operator-set | Fields: `ai_user`, `ai_model`, `ai_provider`, `ai_org`, `ai_bu`, `ai_llm_name`, `ai_app`, and `run_id` / `stage` when the call belongs to a run. **No prompt/answer content, no name of the governed agent that ran, no consent.** Surfaced in the **Tokens & Costs** tab. |
+| **Conversation history** | `itmip_user_history` (KVStore) | user-deletable | Per-user: question text, agent name, the LLM's reasoning, attachment names, artifacts. **The History tab is per-user: an admin cannot read another user's history through the app.** Writes are mirrored to `itmip_changes`. |
+| **KVStore changelog** | `itmip_changes` index, `sourcetype=itmip:kvstore:change` | **60 days** | Every create/update/delete on tracked collections (agents, tools, MCP, configs, orgs, history, …) with `before`/`after`. Built for **KVStore restore**, not legal hold. |
 | **Daily KVStore snapshots** | `itmip_snapshots` index | 24 months | Point-in-time backups. |
 | **Custom / MCP tool calls** | `itmip_llm_custom_tool_calls` (KVStore) | — | `tool_name`, `user`, `status`, `duration`, args **hash**. **Built-in tools are not** individually logged. |
-| **Playbook / skill authoring** | `itmip_authoring_changes` (KVStore) | — | create/update/promote/delete, by_user, by_role. |
+| **Agent / skill authoring** | `itmip_authoring_changes` (KVStore) | none | create/update/promote/delete, by_user, by_role. |
 
-**Gaps that real audit logging (v1.3.0) closes:** no admin-readable record of *who sent what to which LLM*; no prompt/answer content in a long-retention, access-controlled store; the **SECURITY CONFIRMATION acceptance is not persisted at all**; cost metrics carry no playbook; the richest record (`itmip_changes`) is only 60 days.
+**Gaps that real audit logging (v1.3.0) closes:** no admin-readable record of *who sent what to which LLM*; no prompt/answer content in a long-retention, access-controlled store; the **SECURITY CONFIRMATION acceptance is not persisted at all**; cost metrics carry no agent; the richest record (`itmip_changes`) is only 60 days.
 
 ---
 
@@ -44,11 +44,10 @@ A **per-Org audit index** receiving structured events (`sourcetype=itmip:ai:audi
 
 | `event_type` | When | Answers |
 |---|---|---|
-| `llm_request` | **before** each LLM call (the disclosure) | who, which playbook, the user's answers/prompt (at the configured fidelity), attachment names, provider+model+endpoint host, consent timing+status, time |
+| `llm_request` | **before** each LLM call (the disclosure) | who, which agent, the user's answers/prompt (at the configured fidelity), attachment names, provider+model+endpoint host, consent timing+status, time |
 | `llm_response` | on completion | the LLM's answer, tokens, cost, duration, outcome |
 | `consent_acceptance` | when the user accepts the SECURITY CONFIRMATION | who accepted, when, which warning version, for which LLM |
-| `governance_change` | on any playbook/tool/MCP/config/org change | who changed what (secrets redacted), before→after |
-| `upload` | (future) when content is uploaded for a use case | filename, hash, bytes |
+| `governance_change` | on any agent/tool/MCP/config/org change | who changed what (secrets redacted), before→after |
 | `audit_config` | index bootstrap / health pings | excluded from all analytics |
 
 
@@ -75,7 +74,7 @@ frozenTimePeriodInSecs = 67392000
 >
 > **How writes reach an `_*` index (1.3.3+):** Splunk's HTTP event receiver (`receivers/simple`, HEC) **refuses** `_`-prefixed index names ("supplied index … missing"). So for an internal audit index the app writes events via `| collect` instead — the one writer that accepts internal indexes — which adds one lightweight search dispatch per event (audit volume is human-paced, so this is fine). A **normal** (non-`_`) index uses the faster synchronous `receivers/simple` path. Both index styles are fully supported; pick `_*` for automatic admin-only read, or a normal name + a role with `srchIndexesAllowed = <your index>` for the same effect. (Before 1.3.3 the writer only used `receivers/simple`, so an `_*` audit index silently received **no** data — check `index=_internal source=*itmip_llm_audit.log*` for any write failures.)
 >
-> **⚠️ `_*` audit index + `| collect` — coverage limit (fixed-honestly in 1.5.0).** `| collect`'s destination-index check uses the dispatching role's **own** `srchIndexesAllowed`, ignoring *imported* allowances. The `passSystemAuth` identity `splunk-system-user` has an **empty own** list (it gets `_*` only by import), so a system-token `| collect` into a `_*` index **silently mis-routes** the event to a fallback internal index **and still returns HTTP 200** — the data lands in the wrong place and never appears in the Audit tab (this was the cause of empty `outcome`/token columns before 1.5.0). The 1.5.0 writer now **verifies each event landed in the intended index** (it parses the collect result and reads the event back, instead of trusting the HTTP code), **falls back to the caller's own token** when the system token can't reach a `_*` index (so admins / granted auditor roles still write), and reports an honest `logged:false` (with a reason in `itmip_llm_audit.log`) rather than a false success. **Consequence:** with a `_*` audit index, only callers whose **own** role grants `_*` (admins, or an auditor role you grant `_*`) get their turns written; a regular non-admin's `browser_direct` turn reports `logged:false` (lost under `best_effort`, blocked under `enforce`). **To capture EVERY user's turns, set the Org's audit index to a normal (non-`_*`) index** — `receivers/simple` + the system token writes for all users regardless of their search-index ACL — and control *read* access with the index role ACL + the per-Org auditor role (role examples below).
+> **⚠️ `_*` audit index + `| collect` — coverage limit (fixed-honestly in 1.5.0).** `| collect`'s destination-index check uses the dispatching role's **own** `srchIndexesAllowed`, ignoring *imported* allowances. The `passSystemAuth` identity `splunk-system-user` has an **empty own** list (it gets `_*` only by import), so a system-token `| collect` into a `_*` index **silently mis-routes** the event to a fallback internal index **and still returns HTTP 200** — the data lands in the wrong place and never appears in the Audit tab (this was the cause of empty `outcome`/token columns before 1.5.0). The 1.5.0 writer now **verifies that events land in the intended index** (it parses the collect result and reads the event back, instead of trusting the HTTP code). Since 2.7.0 the read-back is done once per route — audit index and token kind — per hour, shared by the search head's worker processes through a small file, `$SPLUNK_HOME/var/run/splunk/itmip_audit_route_cache.json`; every write still has to report "Successfully wrote file", and any failure clears the route so the next write is read back again. It **falls back to the caller's own token** when the system token can't reach a `_*` index (so admins / granted auditor roles still write), and reports an honest `logged:false` (with a reason in `itmip_llm_audit.log`) rather than a false success. **Consequence:** with a `_*` audit index, only callers whose **own** role grants `_*` (admins, or an auditor role you grant `_*`) get their turns written; a regular non-admin's `browser_direct` turn reports `logged:false` (lost under `best_effort`, blocked under `enforce`). **To capture EVERY user's turns, set the Org's audit index to a normal (non-`_*`) index** — `receivers/simple` + the system token writes for all users regardless of their search-index ACL — and control *read* access with the index role ACL + the per-Org auditor role (role examples below).
 
 ### 4.2 Splunk Cloud
 Customer `indexes.conf` and internal (`_`) indexes are not available. Create a normal index via **ACS / the Cloud index UI**, e.g. `itmip_audit_acme`, then enter that name in the Org config. Follow Cloud index naming: **lowercase**, **must not contain `kvstore`**, and set **retention on the index** (no `maxTotalDataSizeMB` in app conf). Restrict access by role (§5).
@@ -122,11 +121,11 @@ permissions allow, which is the same boundary the tab would enforce.
 
 ## 6. Choosing the content mode (mandatory, per Org)
 
-Each Org must pick **how much of the user's input** (their playbook answers, or the whole prompt when no playbook is used) is stored per turn. **Attachment/object names are always logged regardless of mode** (names only, never their content).
+Each Org must pick **how much of the user's input** (their answers to an agent's questions, or the whole prompt when no agent is used) is stored per turn. **Attachment/object names are always logged regardless of mode** (names only, never their content).
 
 | Mode | Stores | Evidence strength | Data-protection exposure |
 |---|---|---|---|
-| `metadata_only` | user, model, playbook, timestamp — **no input body** | weakest | lowest |
+| `metadata_only` | user, model, agent, timestamp; **no input body** | weakest | lowest |
 | `prompt_hash` | SHA-256 of the input | prove a *suspected* text matches | low |
 | `truncated_prompt` | first 200 chars + hash | partial | medium |
 | `full_prompt` | the verbatim input + hash | strongest | **highest** |
@@ -139,7 +138,7 @@ Each Org must pick **how much of the user's input** (their playbook answers, or 
 
 ## 7. Running an audit
 
-Open the **Audit** tab (administrators — see §5.2). Filter by **user**, **time**, **LLM provider/model**, **playbook**, **outcome**, and a **wildcard over the prompt/response** (only meaningful in `truncated_prompt`/`full_prompt` modes). Views: activity timeline (request↔response, with an **assurance** marker), frequency ("how often"), consent log, governance log, and **CSV export** for legal hand-off.
+Open the **Audit** tab (administrators; see §5.2). Filter by **user**, **time**, **LLM provider/model**, **agent**, **outcome**, and a **wildcard over the prompt/response** (only meaningful in `truncated_prompt`/`full_prompt` modes). Views: activity timeline (request↔response, with an **assurance** marker), frequency ("how often"), consent log, governance log, and **CSV export** for legal hand-off.
 
 Ad-hoc SPL (run as a user whose role can read the index):
 ```spl

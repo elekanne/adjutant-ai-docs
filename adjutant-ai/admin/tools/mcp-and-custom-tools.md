@@ -4,10 +4,10 @@ sidebar_position: 8
 
 # Extending Adjutant AI — MCP servers and custom tools
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** Splunk administrators connecting Adjutant AI to systems outside
-Splunk, or exposing Adjutant AI's playbooks to other AI agents.
+Splunk, or exposing Adjutant AI's governed agents to other AI agents.
 
 Out of the box the assistant can reach Splunk and the tools this app ships with.
 This manual covers the three ways to widen that reach — and, just as importantly,
@@ -24,7 +24,7 @@ which of the three to choose.
 5. [Credentials](#5-credentials)
 6. [Reaching a server the search head cannot](#6-reaching-a-server-the-search-head-cannot)
 7. [Custom HTTP tools](#7-custom-http-tools)
-8. [Publishing your playbooks over MCP](#8-publishing-your-playbooks-over-mcp)
+8. [Publishing your agents over MCP](#8-publishing-your-agents-over-mcp)
 9. [What a tool call leaves behind](#9-what-a-tool-call-leaves-behind)
 10. [Limits](#10-limits)
 
@@ -38,7 +38,7 @@ They sound similar and solve different problems.
 |---|---|---|
 | **MCP client** (§2) | Adjutant connects **out** to a Model Context Protocol server someone else runs, and imports its tools | The system you want already has an MCP server — Confluence, GitHub, a vendor's, or one your platform team runs |
 | **Custom HTTP tool** (§7) | You describe one REST call, and the assistant can make it | There is no MCP server, just an API. One endpoint, one job |
-| **MCP server** (§8) | Adjutant publishes **your playbooks** so other AI agents can run them | Another agent — or Splunk's own MCP Server — should be able to run your investigations |
+| **MCP server** (§8) | Adjutant publishes **your agents** so other AI agents can run them | Another agent, or Splunk's own MCP Server, should be able to run your investigations |
 
 The first two bring capability **in**. The third sends it **out**. They are
 independent; most estates use one or two, and nothing breaks if you use all three.
@@ -56,7 +56,10 @@ nothing activates.
 
 ## 2. Connecting to an MCP server
 
-**Tools → MCP servers → + Add MCP Server.**
+**Tools → MCP servers → + Register MCP server.** The editor has four tabs (**General**, **Authentication**,
+**Network**, **Tools**) and is left only through **Cancel** or **Register** (**Save changes** when editing): a
+click beside it or Escape does nothing. A missing name or endpoint marks **General** with **has errors** and keeps
+**Register** disabled.
 
 ### What you will need
 
@@ -75,8 +78,10 @@ that is all you have, put a small HTTP adapter in front of it.
 
 ### The connection test
 
-Saving runs a real handshake and asks the server for its tool list, using the
-credential and proxy you configured. The result appears inline. A failure tells
+**Test connection + list tools**, on the editor's **Tools** tab, runs a real handshake and asks the server for
+its tool list, using the credential and proxy you configured, saved or not. The result appears inline; tick the
+tools to import and **Save** imports them. Changing the endpoint, transport, authentication or network after a
+test clears the result and the ticks, so tools are only ever imported from the server you tested. A failure tells
 you which step failed — reaching the host, the TLS handshake, authentication, or
 the tool listing — so you are not guessing between a firewall and a bad token.
 
@@ -113,14 +118,14 @@ someone's behalf.
 
 ## 4. Keeping imported tools honest
 
-An upstream server can change under you. Adjutant checks periodically, and
-whenever you press **refresh** on a server.
+An upstream server can change under you. Adjutant does not poll for that: the
+check runs when you press **Refresh** on a server in **Tools → MCP servers**.
 
 | What changed | What happens |
 |---|---|
-| A tool's description or input schema | Flagged as **drift** with a badge. **The change is not applied silently** — you review it and click *Accept upstream changes*. |
-| A tool disappeared upstream | Disabled automatically and marked as removed. Past audit records stay valid. |
-| A new tool appeared | Listed as *available but not imported*, with a quick-import button. |
+| A tool's description or input schema | Flagged with a **drift** badge. **The change is not applied silently**: the model keeps seeing the description and schema you imported. To take the new version, un-import the tool and import it again (see the next row); re-enter your addendum, category and tags afterwards. |
+| A tool disappeared upstream | Disabled automatically and marked *removed upstream*. Past audit records stay valid. |
+| A new tool appeared | Not imported. To add it, **Edit** the server, press **Test connection + list tools**, tick the new tool and save. |
 
 Your edits survive all of this. The addendum, category, tags, exposed name and
 visibility are yours and are never overwritten by a refresh.
@@ -140,7 +145,7 @@ Two models for MCP servers, chosen per server.
 | **Global** | One identity, for everybody | The upstream system does its own authorisation, or every user should look the same to it |
 | **Per tenant** | One identity per Org/BU | Different business units must not read each other's data upstream |
 
-With per-tenant, a tenant that has no credential stored simply does not see those
+With per-tenant credentials, an Org/BU that has no credential stored simply does not see those
 tools. They are dropped before the model is told about them, rather than failing
 mid-answer.
 
@@ -205,48 +210,53 @@ Two things worth knowing before you write one:
 - **Redact what should not travel.** Named fields can be stripped from the
   response before the model ever sees them.
 
-The full authoring guide — schema, worked examples, testing, attaching a tool to
-a playbook — is [the custom-tools guide](./custom-tools-authoring.md).
+The full authoring guide (schema, worked examples, testing, attaching a tool to
+an agent) is [the custom-tools guide](./custom-tools-authoring.md).
 
 ---
 
-## 8. Publishing your playbooks over MCP
+## 8. Publishing your agents over MCP
 
-The other direction. Another AI agent discovers your governed playbooks and runs
+The other direction. Another AI agent discovers your governed agents and runs
 them, without being given the keys to Splunk.
 
 **Four tools are exposed, and no more:**
 
 | Tool | Does |
 |---|---|
-| `adjutantai_list_playbooks` | Lists the playbooks published for one Org/BU |
-| `adjutantai_start_playbook` | Starts a run, returns a run id immediately |
-| `adjutantai_get_playbook_status` | `queued` / `running` / `completed` / `failed` |
-| `adjutantai_get_playbook_results` | The verdict, once finished |
+| `adjutantai_list_agents` | Lists the agents published to MCP for one Org/BU |
+| `adjutantai_start_agent` | Starts an agent run, returns a run id immediately |
+| `adjutantai_get_agent_status` | `queued` / `running` / `completed` / `failed` |
+| `adjutantai_get_agent_results` | The verdict, once finished |
+
+Before 2.7.0 the tools were called `adjutantai_*_playbook*`. The old names no longer
+work and are removed from Splunk's MCP Server on upgrade, so reconfigure any MCP client
+that used them.
 
 Start-then-poll rather than one long call, so every request finishes well inside
 the timeouts an MCP client expects.
 
-### Making a playbook available
+### Making an agent available
 
-A playbook is reachable over MCP **only** when you tag it `MCPready`. Tag it in
-the Playbooks tab. Nothing else is exposed, however many playbooks you have.
+An agent is published to MCP **only** when its **Published to MCP** agent mode is on:
+**Agents** tab → **Edit** → **Agent modes**. Switching on an agent mode is what makes an
+agent template an agent. Nothing else is exposed, however many agents you have.
 
 Two more things must be true before a run will start:
 
 1. **`[mcp_server] enabled = 1`** in `local/itmip_ai_workbench.conf`. It ships
    off, and changing it needs a Splunk restart.
-2. **The Backend Ask Service is enabled**, because an MCP run goes through the
+2. **Unattended runs (called the Backend Ask Service in earlier documents) are enabled**, because an MCP run goes through the
    same governed, bounded, default-deny queue as an alert-triggered one. An MCP
    caller gets no more privilege than an alert does.
 
-Listing a playbook needs an authorised user for that Org/BU. **Starting one needs
+Listing an agent needs an authorised user for that Org/BU. **Starting one needs
 an administrator.**
 
 ### Where the tools appear
 
 **Prefer Splunk's own MCP Server.** If `Splunk_MCP_Server` 1.2 or newer is
-installed, Adjutant registers the playbook tools into it automatically, and they
+installed, Adjutant registers the four tools into it automatically, and they
 appear at `/services/mcp` alongside Splunk's own. One endpoint, one token
 audience, one place to govern access.
 
@@ -284,7 +294,7 @@ Worth knowing before you design around them.
 - **Per-user credentials on custom tools do not complete a call** (§7).
 - **Category does not route anything.** It groups the admin view. It does not
   influence which tools the model is offered.
-- **Only `MCPready` playbooks are reachable** over MCP, and only an administrator
+- **Only agents with the Published to MCP mode on are reachable** over MCP, and only an administrator
   can start one.
 
 ---
@@ -292,7 +302,7 @@ Worth knowing before you design around them.
 ## Related documents
 
 - [the custom-tools guide](./custom-tools-authoring.md) — authoring a custom HTTP tool in full
-- [the MCP server guide](./mcp-server.md) — publishing playbooks, both surfaces
+- [the MCP server guide](./mcp-server.md): publishing agents, both surfaces
 - [the MCP OAuth guide](./mcp-oauth.md) — OAuth-protected MCP servers
 - [the tool catalogue](./tool-catalogue.md) — the built-in tools and per-Org enablement
 - [the customer authorisation hook guide](../security/customer-authorisation-hook.md) — IAM-gated targets

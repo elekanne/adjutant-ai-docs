@@ -4,12 +4,12 @@ sidebar_position: 9
 
 # Custom HTTP tools — authoring guide
 
-**App version:** 2.5.9 · **Last updated:** 2026-09-16 · **Audience:** Splunk admins
+**App version:** 2.7.0 · **Last updated:** 2026-09-16 · **Audience:** Splunk admins
 (`admin` / `sc_admin`) who will author custom tools on the search head where Adjutant AI
 is installed.
 
-This is the deep guide. [The tool catalogue](./tool-catalogue.md) covers the Tools tab end-to-end — the
-built-in catalogue, per-tenant assignment, metadata overrides, MCP servers — and has a
+This is the deep guide. [The tool catalogue](./tool-catalogue.md) covers the Tools tab end-to-end (the
+built-in catalogue, per-Org/BU assignment, metadata overrides, MCP servers) and has a
 shorter custom-tools section. Read that first if you want the wider map; read this one
 when you are actually about to write a tool definition, or when you are reviewing one
 somebody else wrote.
@@ -18,8 +18,7 @@ somebody else wrote.
 
 ## 1. What a custom tool is, and why it exists
 
-The dispatcher ships **182 built-in tools** (source-verified:
-`grep -cE "^\s*name:\s*[\"']" src/services/tools.ts`). Every one of them talks to
+The dispatcher ships **196 built-in tools**. Every one of them talks to
 *Splunk* or to a system Adjutant AI has a first-class integration with — search, indexes,
 saved searches, dashboards, ES, ITSI, TrackMe, SSE, ServiceNow, MLTK. None of them talks
 to **your** systems: the internal CMDB that is not ServiceNow, the change-freeze calendar,
@@ -39,7 +38,7 @@ allowlist is re-checked server-side after argument substitution.
 
 **When *not* to use one:**
 
-- **ServiceNow** — use **Tools → ServiceNow** instead. v1.7.0 shipped 16 first-class
+- **ServiceNow**: use **Tools → ServiceNow** instead. The app ships 17 first-class
   ServiceNow tools plus CMDB/CSDM traversal, write-back and per-Org transports. See
   [the ServiceNow guide](../integrations/servicenow.md). A custom HTTP tool remains the escape hatch for a
   bespoke ServiceNow table nothing else reaches.
@@ -59,12 +58,11 @@ reviewing somebody else's tool definition.
 
 ### 2.1 What reaches the LLM, and what does not
 
-A stored `CustomToolDefinition` has seven top-level blocks: `name`, `version`, `title`,
+A stored `CustomToolDefinition` has ten top-level fields: `name`, `version`, `title`,
 `description`, `parameters`, `scope`, `implementation`, `response`, `guardrails`,
 `enabled`. The runtime hands the model **three of them**:
 
 ```ts
-// src/services/tools.ts:14133-14145
 return defs
     .filter((d) => d.enabled)
     .map((d) => ({
@@ -81,22 +79,25 @@ return defs
 `implementation`, `response` and `guardrails` are never in that projection. They are
 also never rendered into the LLM prompt anywhere else. The model knows a tool called
 `cmdb_get_owner` takes a `ci_name` string; it does not know the call goes to
-`https://cmdb.acme.internal/api/v2/ci`, and it does not know a bearer token is attached.
+`https://cmdb.acme.example/api/v2/ci`, and it does not know a bearer token is attached.
 
-The same split holds on the wire in the browser. The `/definitions` GET does return the
-full envelope to an admin's browser (the editor needs it to render), so an admin's
-session can read the URL and header map — but **never a secret value**: `implementation`
-stores a credential *name*, and the cleartext is fetched server-side at invoke time and
-discarded. See the handler docstring at `bin/itmip_llm_custom_tools.py:11-32`.
+The browser keeps the same split. The `/definitions` GET returns the `implementation` block
+only to administrators, who author tools; for every other user the handler strips it, so a
+user who may run a tool sees its name, description and inputs but not its address, headers
+or authentication. The collection itself is readable only by `admin` and `sc_admin`, so the
+rows cannot be read around the handler either. Administrators do see literal header values,
+so keep secrets out of them: `implementation` stores a credential *name*, and the cleartext
+is fetched server-side at invoke time and discarded (`_resolve_secret` in
+`bin/itmip_llm_custom_tools.py`).
 
 ### 2.2 `allowed_hosts` — the SSRF gate
 
 `implementation.allowed_hosts` is a **required, non-empty array** of hostnames
-(`bin/itmip_llm_custom_tools.py:203-208`). It is checked **twice**:
+(`_validate_definition` in `bin/itmip_llm_custom_tools.py`). It is checked **twice**:
 
 1. **At save time** — the definition is refused if the list is empty or malformed.
-2. **At invoke time, after `{{ }}` substitution** —
-   `bin/itmip_llm_custom_tools.py:676-683`:
+2. **At invoke time, after `{{ }}` substitution**, in `_http_invoke` in
+   `bin/itmip_llm_custom_tools.py`:
 
 ```python
 parsed = urlparse(url)
@@ -111,23 +112,22 @@ admin may want one tool per environment — but the model supplying `host` canno
 the allowlist, because the check happens on the *rendered* host. The comparison is an
 exact, case-sensitive string match against `parsed.hostname`; there is no wildcard, no
 suffix match, and no port in the comparison (a different port on an allowed host is
-allowed). The UI lowercases hosts as you add them (`CustomToolsSection.tsx:900`), so
-type them in lowercase — a `{{ host }}` argument rendering to `CMDB.acme.com` will not
-match a stored `cmdb.acme.com`.
+allowed). The UI lowercases hosts as you add them, so a `{{ host }}` argument
+rendering to `CMDB.acme.example` will not match a stored `cmdb.acme.example`.
 
 Substitution itself is a strict whitelist, not an evaluator:
 
 ```python
-# bin/itmip_llm_custom_tools.py:82
+# bin/itmip_llm_custom_tools.py
 TEMPLATE_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 ```
 
 Only `{{ name }}` where `name` is a key in the call's `arguments`. No expressions, no
 Python `eval`, no filters. A placeholder whose argument is missing raises `KeyError` and
 the call fails closed with `Missing required argument: x`
-(`bin/itmip_llm_custom_tools.py:673-674`) — it never goes out with a blank substituted in.
-Substitution runs over `url`, `query`, `headers` and `body`, recursing through dicts and
-lists (`_render`, lines 449-467).
+(`_http_invoke` in `bin/itmip_llm_custom_tools.py`); it never goes out with a blank
+substituted in. Substitution runs over `url`, `query`, `headers` and `body`, recursing
+through dicts and lists (`_render` in the same module).
 
 ### 2.3 Private, loopback and link-local refusal
 
@@ -139,17 +139,17 @@ search head, and both are exactly what an SSRF wants. So:
 > unless the definition sets `implementation.allow_internal: true`.
 
 The classification is delegated to `itmip_llm_probe_guard.classify_host`
-(`bin/itmip_llm_custom_tools.py:128-156`), which is the app's single implementation of
-"is this destination allowed" — shared with the setup wizard's probe path. It resolves
-the name, judges **every** address it resolves to, and the **strictest verdict wins**
-(`bin/itmip_llm_probe_guard.py:118-140`) — a name returning one public and one loopback
+(through `_is_internal_host` in `bin/itmip_llm_custom_tools.py`), which is the app's
+single implementation of "is this destination allowed", shared with the setup wizard's
+probe path. It resolves the name, judges **every** address it resolves to, and the
+**strictest verdict wins** (`classify_host` in `bin/itmip_llm_probe_guard.py`): a name returning one public and one loopback
 address is refused, because taking the permissive answer is how a DNS-rebinding attack
 gets its first lookup past a guard. Reserved, multicast and unspecified addresses are
 refused too.
 
 The check runs at save time against every entry in `allowed_hosts`
-(`bin/itmip_llm_custom_tools.py:211-216`) and again at invoke time against the rendered
-host (lines 682-683).
+(`_validate_definition`) and again at invoke time against the rendered host
+(`_http_invoke`), both in `bin/itmip_llm_custom_tools.py`.
 
 Two honest caveats:
 
@@ -158,7 +158,7 @@ Two honest caveats:
   not this check, is the actual gate.
 - **The verdict is not pinned to an address.** `classify_host` resolves, decides, and
   discards; `opener.open()` later resolves again. The gap between the two lookups is a
-  rebinding window. The code says so in its own docstring (lines 137-150) and points at
+  rebinding window. The code says so in the docstring of `_is_internal_host` and points at
   `guard.check_destination`, which returns the address it validated — moving `/invoke`
   onto that is deliberately a separate change with its own test. Treat `allow_internal`
   as a control you audit, not a control you sprinkle.
@@ -171,19 +171,19 @@ doing the real work at that point.
 
 Tool definitions contain **no secrets**. `implementation.auth` carries a credential
 *name*; the cleartext is read at invoke time from Splunk's `storage/passwords` under
-realm `itmip_llm_assistent_app` (`bin/itmip_llm_common.py:23`), by the **system token**,
+realm `itmip_llm_assistent_app` (`LLM_PASSWORD_REALM` in `bin/itmip_llm_common.py`), by the **system token**,
 inside splunkd. It is:
 
 - never written into the KVStore row,
 - never returned in any `/definitions` response,
-- never logged (the audit row records the *resolved name*, not the value —
-  `bin/itmip_llm_custom_tools.py:1201-1219`),
+- never logged (the audit row records the *resolved name*, not the value;
+  `_record_audit` in `bin/itmip_llm_custom_tools.py`),
 - never sent to the LLM.
 
-The name is sanitised before lookup — only `[A-Za-z0-9._-]` survives
-(`bin/itmip_llm_custom_tools.py:477`) — so a hostile Org name in a per-tenant template
+The name is sanitised before lookup: only `[A-Za-z0-9._-]` survives
+(`_resolve_secret` in `bin/itmip_llm_custom_tools.py`), so a hostile Org name in a `per_tenant` template
 cannot traverse into another realm. Secret values get their endpoints stripped before
-being formed into a header (line 728): a trailing newline from a copy-paste would
+being formed into a header (`_http_invoke`, same module): a trailing newline from a copy-paste would
 otherwise make urllib3 raise `InvalidHeader` on `b'Bearer …\n'`. Only the endpoints,
 never the middle, so PEM-shaped values survive.
 
@@ -194,7 +194,7 @@ Full credential-model detail is §5.
 `guardrails.redact_fields` is a list of key names. After the transform and before the
 response reaches the model, the payload is walked recursively and any key whose name
 matches is replaced with the literal string `[REDACTED]`
-(`bin/itmip_llm_custom_tools.py:603-617`).
+(`_apply_redact` in `bin/itmip_llm_custom_tools.py`).
 
 Use it for fields that are structurally present in a response and have no business in a
 prompt or a chat transcript: `sys_id`, `internal_notes`, `password_hash`, a PII column
@@ -214,9 +214,9 @@ beats a denylist here, as it usually does.
 ### 2.6 Rate limiting
 
 `guardrails.rate_limit_per_minute` (default 30) is enforced **per (tool, user)** on a
-60-second sliding window before anything else happens
-(`bin/itmip_llm_custom_tools.py:1113-1116`, implementation at
-`bin/itmip_llm_common.py:431-447`). Over the cap, `/invoke` returns HTTP 429 and the
+60-second sliding window, after the scope and enabled checks and before the cache
+lookup or any outbound call (`_handle_invoke` in `bin/itmip_llm_custom_tools.py`,
+implementation in `rate_limit_check` in `bin/itmip_llm_common.py`). Over the cap, `/invoke` returns HTTP 429 and the
 call is not made.
 
 Be honest about what this is: the state is a **process-local dict** in the persistent
@@ -226,21 +226,20 @@ hammering an upstream, not a billing control or a quota you can prove to a vendo
 
 ### 2.7 TLS verification skip
 
-The editor exposes a **⚠ Skip TLS certificate verification (dev only)** checkbox
-(`CustomToolsSection.tsx:647-694`). It is:
+The editor exposes a **⚠ Skip TLS certificate verification (dev only)** checkbox. It is:
 
-- **Hidden on Splunk Cloud.** The whole block is behind `{!isCloud && ...}`, where
-  `isCloud` is `instanceType === "cloud"` (line 247).
+- **Hidden on Splunk Cloud.** The editor does not render the checkbox when the
+  instance type is `cloud`.
 - **Refused on Splunk Cloud server-side, regardless of what is in the stored row**
-  (`bin/itmip_llm_custom_tools.py:798-815`). A definition imported from a dev instance
+  (`_http_invoke` in `bin/itmip_llm_custom_tools.py`). A definition imported from a dev instance
   with the flag set will have it ignored on Cloud, with an INFO line to `splunkd.log`
   saying why. If Cloud detection itself throws, the flag is refused anyway — fail-safe.
 - **Audited on every call it affects.** When it is active a line goes to `splunkd.log`
-  (`tls_verify_skipped=true url=… tool=… user=…`, lines 816-821) and every audit row
-  carries `tls_verify_skipped: true` (line 1214).
+  (`tls_verify_skipped=true url=… tool=… user=…`) and every audit row
+  carries `tls_verify_skipped: true`.
 
-The editor turns red and shows a standing warning panel while the box is ticked
-(lines 673-692). Treat any audit row with `tls_verify_skipped=true` outside a dev
+The editor turns red and shows a standing warning panel while the box is ticked.
+Treat any audit row with `tls_verify_skipped=true` outside a dev
 instance as an incident:
 
 ```spl
@@ -254,30 +253,35 @@ The correct fix for a private CA is `tls_ca_pem_ref`, not this flag. See [the to
 
 | Operation | Who | Enforced at |
 |---|---|---|
-| List definitions (`GET /definitions`) | any authenticated user, filtered by scope | `itmip_llm_custom_tools.py:993-1027` |
-| Create / edit (`POST /definitions`) | **Splunk admin only** (`admin`/`sc_admin`) | line 1030 |
-| Delete (`DELETE /definitions`) | **Splunk admin only** | line 1063 |
-| Invoke (`POST /invoke`) | any authenticated user whose Org/BU the tool is in scope for | lines 1096-1105 |
+| List definitions (`GET /definitions`) | any authenticated user, filtered by scope | `_handle_definitions` in `bin/itmip_llm_custom_tools.py` |
+| Create / edit (`POST /definitions`) | **Splunk admin only** (`admin`/`splunk_admin`/`sc_admin`) | `_handle_definitions` |
+| Delete (`DELETE /definitions`) | **Splunk admin only** | `_handle_definitions` |
+| Invoke (`POST /invoke`) | any authenticated user whose Org/BU the tool is in scope for | `_handle_invoke` |
 
 The caller's Org and BU are resolved **server-side from that user's own Splunk roles**
-(`_caller_tenant`, lines 248-265). The `org` / `bu` the browser sends are advisory hints
-only — a non-admin claiming another tenant's Org/BU cannot list or invoke that tenant's
+(`_caller_tenant` in `bin/itmip_llm_custom_tools.py`). The `org` / `bu` the browser sends are advisory hints
+only. A non-admin claiming another Org/BU cannot list or invoke that Org/BU's
 private tools, which is important because those tools run with *server-stored
 credentials*. The `splunk_app` hint only selects which Org/BU app-pattern to match.
 
-The authoring UI additionally returns `null` for non-admins (`CustomToolsSection.tsx:63`),
-but that is cosmetic; the handler is the authority.
+The authoring UI additionally renders nothing for non-admins, but that is cosmetic; the
+handler is the authority.
 
 ### 2.9 Per-invocation auditing
 
-Every `/invoke` — success, failure, cache hit, refusal — writes one row to the
-`itmip_llm_custom_tool_calls` KVStore collection (`default/collections.conf:405`,
-writer at `bin/itmip_llm_custom_tools.py:1188-1219`). Auditing is best-effort by design:
-an audit write that fails must never block the tool call (lines 426-436).
+Every `/invoke` that gets as far as the cache or the outbound call writes one row to the
+`itmip_llm_custom_tool_calls` KVStore collection (`[itmip_llm_custom_tool_calls]` in
+`default/collections.conf`, writer `_record_audit` in `bin/itmip_llm_custom_tools.py`).
+That covers success, upstream failure, a cache hit, and a refusal by the call's own
+checks (host not in `allowed_hosts`, internal host, missing credential, failed
+customer auth hook). A request refused before that point (tool not found, out of scope,
+disabled, rate-limited, unsupported implementation type, licence) returns its HTTP error
+and writes **no** audit row. Auditing is best-effort by design: an audit write that fails
+must never block the tool call (`_audit` in the same module).
 
 | Field | Meaning |
 |---|---|
-| `tool_name`, `user`, `org_short`, `bu_short` | who called what, as which tenant |
+| `tool_name`, `user`, `org_short`, `bu_short` | who called what, as which Org/BU |
 | `arguments_hash` | SHA-256 of the canonicalised arguments — **the arguments themselves are not stored** |
 | `status` | `ok` / `error` |
 | `error` | first 200 chars of the failure |
@@ -288,7 +292,7 @@ an audit write that fails must never block the tool call (lines 426-436).
 | `credential_ref_resolved` | the final `storage/passwords` **name** after template expansion — no value |
 | `tls_verify_skipped` | the dev-mode TLS skip was active |
 | `tool_kind` | `http_custom` here; `mcp` for MCP-imported |
-| `run_id` | join key back to the template run (v1.7.0; older rows null) |
+| `run_id` | join key back to the agent run (v1.7.0; older rows null) |
 | `created_at` | epoch ms |
 
 Read it from SPL with `| inputlookup itmip_llm_custom_tool_calls`. The collection is
@@ -307,9 +311,9 @@ retained.
 
 **Adjutant AI → Tools → Custom tools → + Add custom tool**
 
-The **Tools** tab is admin-only and hidden for everyone else (`src/App.tsx:233, 434`).
+The **Tools** tab is admin-only and hidden for everyone else.
 As of 2.5.9 the Tools page has four second-level tabs — **Built-in tools**, **Custom
-tools**, **MCP servers**, **ServiceNow** (`ToolsPage.tsx:138-142`); before 2.5.9 these
+tools**, **MCP servers**, **ServiceNow**; before 2.5.9 these
 were four panels stacked down one page, so reaching ServiceNow meant scrolling past 182
 built-in rows. If you are reading an older doc that says "beneath the built-in tool
 table", this is what changed.
@@ -319,53 +323,58 @@ The Custom tools panel lists what exists (Name / Type / Scope / Version / State)
 tool using the IAM hook shows an **IAM** pill next to its name.
 
 If the licence tier cannot unlock `custom_http_tools`, an upsell banner appears at the
-top of the panel (`CustomToolsSection.tsx:77-79`) — see §8.
+top of the panel. See §8.
 
 ### Every field in the editor
 
-Labels below are the literal on-screen strings. Blocks appear in this order.
+Labels below are the literal on-screen strings. The editor has six tabs (**General**, **Parameters**,
+**Request**, **Network**, **Response and limits**, **Test**); each block below names its tab. The editor is left
+only through **Cancel** or **Create** (**Save changes** for an existing tool): a click beside it or Escape does
+nothing. Each rule the server applies at save time is checked as you type, in the server's wording: the problem
+appears under its field, its tab says **has errors**, and the save button stays disabled and names the tabs to
+fix. A tab you changed says **changed**.
 
-**Identity**
+**Identity** (General tab)
 
 | On-screen label | Stored as | Rules and notes |
 |---|---|---|
-| `Tool name (lowercase, 3-64 chars, no spaces)` | `name` | Must match `^[a-z][a-z0-9_]{2,63}$` (`itmip_llm_custom_tools.py:78`). This is the function name the LLM calls. Must be unique — a clashing name is refused with HTTP 409 (line 1044). A name colliding with a **built-in** is not refused at save time but the custom tool is silently dropped at runtime: built-ins win (§7). |
+| `Tool name (lowercase, 3-64 chars, no spaces)` | `name` | Must match `^[a-z][a-z0-9_]{2,63}$` (`TOOL_NAME_RE` in `bin/itmip_llm_custom_tools.py`). This is the function name the LLM calls. Must be unique: a clashing name is refused with HTTP 409. A name colliding with a **built-in** is not refused at save time but the custom tool is silently dropped at runtime: built-ins win (§7). |
 | `Title (display name)` | `title` | Admin-facing only. Never reaches the model. |
 | `Version (semver)` | `version` | Must match `^\d+\.\d+\.\d+$`. Not used for anything at runtime — it is there so exported JSON is reviewable. |
 | `Description (shown to the LLM — be specific)` | `description` | **Minimum 8 characters**, required. This is the *only* prose the model gets. Say what the tool does **and when to call it**; a vague description is the single most common reason a custom tool is never used or is used wrongly. |
 
-**Scope**
+**Scope** (General tab)
 
 | On-screen label | Stored as | Notes |
 |---|---|---|
-| `Sharing` | `scope.sharing` | `private (owner Org+BU only)` / `app (whole owner Org)` / `global (every Org)`. Evaluated in `_doc_visible_to` (`itmip_llm_custom_tools.py:268-285`). |
-| `Owner Org` | `scope.owner_org` | Upper-cased by the form. |
-| `Owner BU` | `scope.owner_bu` | Upper-cased by the form. |
-| `Enabled` | `enabled` | Unticking hides the tool from every non-admin and refuses `/invoke` with 403 (line 1105). Admins still see disabled rows in the list. |
+| `Sharing` | `scope.sharing` | `private (owner Org+BU only)` / `app (whole owner Org; with no owner Org, as the shipped tools have, every Org)` / `global (every Org)`. Evaluated in `_doc_visible_to` in `bin/itmip_llm_custom_tools.py`. |
+| `Who may use this tool?` | `scope.owner_org`, `scope.owner_bu` | One Organisation and Business Unit, picked from the existing ones and upper-cased. A `private` tool needs its Business Unit. |
+| `Enabled` | `enabled` | Unticking hides the tool from every non-admin and refuses `/invoke` with 403, for admins too. Admins still see disabled rows in the list. |
 
-**Parameters** — see §4.
+**Parameters** (Parameters tab) — see §4.
 
-**Implementation**
+**Request** (Request tab; the authentication rows are its Authentication section)
 
 | On-screen label | Stored as | Notes |
 |---|---|---|
-| `Type` | `implementation.type` | `http (declarative)` is the only selectable option. The other three are rendered `disabled` (`CustomToolsSection.tsx:509-517`). |
+| `Type` | `implementation.type` | `http (declarative)` is the only selectable option. The other three are rendered `disabled`. |
 | `Method` | `implementation.method` | GET / POST / PUT / PATCH / DELETE. |
 | `Timeout (s)` | `implementation.timeout_seconds` | Form clamps 1–60; default 10 (`DEFAULT_TIMEOUT_S`). |
-| `URL (supports {{ argName }} substitution)` | `implementation.url` | Must be `http`/`https` (line 201). |
+| `URL (supports {{ argName }} substitution)` | `implementation.url` | Must be `http`/`https`, checked at save time. |
 | `Allowed hosts (required — every host the tool may reach)` | `implementation.allowed_hosts` | Pill editor; type a host, Enter or **+ Add**. Lowercased on add. Non-empty is enforced server-side. |
 | `Allow internal (RFC1918 / loopback) hosts in the allowlist` | `implementation.allow_internal` | Checkbox under the host pills. §2.3. |
-| `Query params` | `implementation.query` | Key/value rows, `{{ }}`-substituted, URL-encoded and appended (line 772-774). |
-| `Headers` | `implementation.headers` | Key/value rows, `{{ }}`-substituted. |
+| `Query params` | `implementation.query` | Key/value rows with a **Remove** each, `{{ }}`-substituted, URL-encoded and appended to the URL. A row without a name is not stored. |
+| `Headers` | `implementation.headers` | Key/value rows with a **Remove** each, `{{ }}`-substituted. |
+| `Request body` | `implementation.body` | Shown for POST, PUT and PATCH. JSON is stored and sent as JSON, anything else as text; `{{ }}`-substituted. |
 | `Auth type` | `implementation.auth.type` | `none` / `basic` / `bearer token` / `custom header`. |
 | `Credential model (v0.7.0+)` | `auth.credential_model` | Shown only when auth type ≠ none. §5. |
 | `Credential ref (name in storage/passwords)` | `auth.credential_ref` | Shown for the `global` model. |
 | `Credential ref template — {org} and {bu} substitute at invoke` / `… {user} substitutes at invoke` | `auth.credential_ref_template` | Shown for `per_tenant` / `per_user`. |
 | `Basic-auth username` | `auth.username` | Shown for `basic`. The *password* is the resolved secret. |
 | `Header name` | `auth.header_name` | Shown for `header`. Defaults to `X-Api-Key` if left blank. |
-| `Use customer auth hook for IAM-gated targets` | `implementation.customer_auth` | Calls `bin/customer_authorisation.py` once per request to mint headers, for targets behind WebEAM / Ping / Okta / AzureAD. Runs **after** static auth so its headers win on collisions; a hook failure is a **hard refusal** — there is no unauthenticated fallback (lines 758-764). See [the customer authorisation hook guide](../security/customer-authorisation-hook.md). |
+| `Use customer auth hook for IAM-gated targets` | `implementation.customer_auth` | Calls `bin/customer_authorisation.py` once per request to mint headers, for targets behind WebEAM / Ping / Okta / AzureAD. Runs **after** static auth so its headers win on collisions; a hook failure is a **hard refusal**; there is no unauthenticated fallback. See [the customer authorisation hook guide](../security/customer-authorisation-hook.md). |
 
-**Outbound network (proxy + TLS CA)** — independent per tool, so several tools on one
+**Outbound network (proxy + TLS CA)** (Network tab) — independent per tool, so several tools on one
 search head can each use a different proxy and trust a different CA.
 
 | On-screen label | Stored as |
@@ -378,7 +387,7 @@ search head can each use a different proxy and trust a different CA.
 All three are honoured by the shared outbound builder
 `bin/itmip_llm_http_client.py::build_request`, which also backs the MCP client.
 
-**Response shaping**
+**Response shaping** (Response and limits tab)
 
 | On-screen label | Stored as | Notes |
 |---|---|---|
@@ -388,11 +397,11 @@ All three are honoured by the shared outbound builder
 
 A transform that cannot run — `jq` or `jsonpath_ng` not importable, or the expression
 throws — does **not** fail the call. The untransformed body is returned and
-`transform_skipped: true` comes back with it (`itmip_llm_custom_tools.py:620-645`). The
+`transform_skipped: true` comes back with it (`_apply_transform` in `bin/itmip_llm_custom_tools.py`). The
 reasoning is that the LLM still gets data; the cost is that a silently-skipped transform
 can push a much larger payload at the model than you designed for, which then hits
 `max_bytes` and truncates mid-JSON. If you rely on a transform, check
-`transform_skipped` in the Save & test output.
+`transform_skipped` in the Save and test output.
 
 **Guardrails**
 
@@ -404,9 +413,9 @@ can push a much larger payload at the model than you designed for, which then hi
 
 The result cache is in-process and keyed by credential model —
 `(tool, args)` for global, `(tool, org, bu, args)` for per-tenant,
-`(tool, user, args)` for per-user (`itmip_llm_custom_tools.py:1128-1137`), so a cached
-result can never cross a tenant or user boundary. Only successful calls are cached
-(line 1175). A cache hit **does not re-run the IAM hook** — that is why
+`(tool, user, args)` for per-user (`_handle_invoke` in `bin/itmip_llm_custom_tools.py`), so a cached
+result can never cross an Org/BU or user boundary. Only successful calls are cached.
+A cache hit **does not re-run the IAM hook**; that is why
 `customer_auth_used` is false on cached rows, and it is how you tell a fresh
 gateway-authorised call from a replayed one in the audit log.
 
@@ -420,8 +429,8 @@ gateway-authorised call from a replayed one in the audit log.
 are what the model receives as the tool's `input_schema`; everything else in the schema
 is stored but not forwarded.
 
-The server validation is deliberately light — the app does not carry `jsonschema` as a
-dependency (`itmip_llm_custom_tools.py:105-125`). It refuses:
+The server validation is deliberately light: the app does not carry `jsonschema` as a
+dependency (`_validate_parameters_schema` in `bin/itmip_llm_custom_tools.py`). It refuses:
 
 - `parameters` that is not an object,
 - `parameters.type` that is not `"object"`,
@@ -430,9 +439,9 @@ dependency (`itmip_llm_custom_tools.py:105-125`). It refuses:
 - a `required` entry that is not present in `properties` — the one error that actually
   catches a real authoring mistake.
 
-The browser also refuses to save while the textarea does not parse as JSON with
-`type: "object"` (`CustomToolsSection.tsx:258-271`); the field border turns red and
-**Save** reports `Parameters JSON Schema is invalid.`
+The editor applies the same checks as you type, in the server's wording (for example
+`parameters.required entry 'q' is not in parameters.properties.`): the field border turns red,
+the **Parameters** tab says **has errors**, and the save button stays disabled.
 
 Note what is *not* enforced: nothing validates the arguments the model actually sends
 against this schema at invoke time. The schema is guidance to the model and a contract
@@ -518,22 +527,22 @@ Set `Auth type` first; the `Credential model` selector appears only when it is n
 | Model | Resolves to | Template placeholders | Use when |
 |---|---|---|---|
 | `Global — one shared identity for everyone` | the literal `credential_ref` | — | one service account for the whole estate |
-| `Per-tenant — one identity per (Org, BU)` | `credential_ref_template` with `{org}` / `{bu}` substituted | `{org}`, `{bu}` (`{user}` renders empty) | MSP / multi-tenant installs where each customer has their own upstream account |
+| `Per-tenant — one identity per (Org, BU)` | `credential_ref_template` with `{org}` / `{bu}` substituted | `{org}`, `{bu}` (`{user}` renders empty) | MSP / multi-Org installs where each customer has their own upstream account |
 | `Per-user — each Splunk user's own OAuth token` | `credential_ref_template` with `{user}` substituted | `{user}`, `{org}`, `{bu}` | **not shipped** — see below |
 
 Substituted values are lower-cased and stripped to `[a-z0-9_-]`
-(`_safe_lower`, `itmip_llm_custom_tools.py:487-497`), so Org `ACME` / BU `Ops-1` with
+(`_safe_lower` in `bin/itmip_llm_custom_tools.py`), so Org `ACME` / BU `Ops-1` with
 template `confluence_{org}_{bu}` resolves to `confluence_acme_ops-1`.
 
 **Backward compatibility:** a definition with no `credential_model` but a
-`credential_ref` is interpreted as `global` (lines 543-545), so 0.6.0-era definitions
+`credential_ref` is interpreted as `global` (`_resolve_credential_for_auth` in
+`bin/itmip_llm_custom_tools.py`), so 0.6.0-era definitions
 keep working untouched.
 
 ### Storing the secret
 
-There is no in-app secrets editor for tool credentials. The UI hint mentioning a
-"Secrets tab" (`CustomToolsSection.tsx:1148`) does not correspond to a tab that exists —
-store the credential against splunkd directly:
+There is no in-app secrets editor for tool credentials: the custom tool editor holds only
+the name of the stored credential. Store the credential against splunkd directly:
 
 ```bash
 curl -k -u admin:<pw> \
@@ -552,63 +561,63 @@ one-liner.
 This differs by model, and the difference is deliberate:
 
 - **Global** — `/invoke` returns `{ok: false, error: "credential_ref '<name>' is missing
-  or empty."}` (lines 709-719). A global credential missing is a *configuration* error;
+  or empty."}` (`_http_invoke` in `bin/itmip_llm_custom_tools.py`). A global credential missing is a *configuration* error;
   it should be loud.
 - **Per-tenant** — the tool is **dropped from the advertised list** for that (Org, BU)
-  before the model ever sees it (lines 1004-1026). A tenant that has not been onboarded
+  before the model ever sees it (`_handle_definitions`, on `GET`). An Org/BU that has not been onboarded
   simply does not get the tool, rather than getting a tool that fails on every call.
   Dropping is not silent: every listing logs it, and the first drop per process also
-  posts a Splunk system message naming the tool, the tenant and the fix
-  (`_announce_tool_drop`, lines 507-523):
+  posts a Splunk system message naming the tool, the Org/BU and the fix
+  (`_announce_tool_drop`):
 
   > Custom tool 'x' is not advertised for Org ACME / BU OPS: its per-tenant credential
   > is missing from the secret store. Store the credential to restore the tool.
 
   If an admin reports "the tool works for me but the model never uses it for Team B",
   this is the first thing to check. Note that **admins see every tool regardless of
-  scope** (`_doc_visible_to` returns True for admins, line 270) — but the per-tenant
+  scope** (`_doc_visible_to` returns True for admins), but the per-tenant
   credential drop is applied *after* that, so an admin without the credential for their
   own resolved Org/BU also loses the tool from the advertised list.
 - **Per-user** — see below.
 
 ### Per-user is schema-only
 
-The `per_user` runtime is **not shipped in 2.5.9**. The schema is in place, the editor
+The `per_user` runtime is **not shipped in 2.7.0**. The schema is in place, the editor
 accepts it, the definition saves and loads — and every invocation returns a structured
-refusal (lines 586-595):
+refusal (`_resolve_credential_for_auth` in `bin/itmip_llm_custom_tools.py`):
 
 ```json
 {
   "ok": false,
   "error": "no_user_credential",
   "auth_url": null,
-  "message": "No per-user credential is stored for 'github_user_alice'. Connect your account in Settings → Tool credentials, then re-try."
+  "message": "No per-user credential is stored for 'github_user_alice'. Ask your Splunk administrator to store one under that name in the Splunk credential store (realm itmip_llm_assistent_app), then try again."
 }
 ```
 
-`auth_url` is `null` because the OAuth-start endpoint does not exist yet, and the
-"Settings → Tool credentials" page referenced in that message does not exist either.
+`auth_url` is `null` because there is no OAuth-start endpoint: an administrator stores
+the credential, as described under [Storing the secret](#storing-the-secret).
 Per-user tools stay **visible** to the model (unlike per-tenant) precisely so the model
 can relay that message and the user can act on it — which, today, they cannot.
 
-The in-app hint says the runtime is "scheduled for v0.8.0"
-the user-credential runtime is not yet shipped; the handler comment
-says "Phase 3". All three predate 2.5.9 and none of them has happened. **Do not build a
+The hint the editor shows under a per-user credential still names a release for the
+OAuth runtime. That hint is out of date: the runtime has not shipped. **Do not build a
 workflow on `per_user`.** If a user-scoped credential is a hard requirement today, the
 workable shape is `per_tenant` with a BU per team, or an IAM gateway in front of the
 upstream via the `customer_auth` hook, which *does* have the calling user's name in its
-context (`splunk_user`, line 755).
+context (`splunk_user`).
 
 ---
 
-## 6. Testing it — Save & test
+## 6. Testing it — Save and test
 
-At the bottom of the editor, above the footer:
+On the editor's **Test** tab:
 
 1. **`Arguments JSON`** — a textarea. Type the arguments as the model would send them,
    e.g. `{"ci_name":"web-prod-07"}`.
-2. **`Save & test`** — the button. It **saves the draft first**, then calls `/invoke`
-   (`CustomToolsSection.tsx:328-361`). There is no dry-run: a `DELETE`-method tool
+2. **`Save and test`** — the button, enabled only when every tab is valid. It **saves the draft first** (and
+   keeps the saved row, so a later **Save changes** updates it and the dialog stays open), then calls `/invoke`
+   There is no dry-run: a `DELETE`-method tool
    under test performs the delete.
 3. The status line next to the button shows `OK (HTTP 200)`, plus ` — cached` and/or
    ` — truncated` when either applies, or `Error: <message>`.
@@ -643,28 +652,28 @@ If the test fails, read the error literally:
 
 ---
 
-## 7. Attaching a tool to a playbook
+## 7. Attaching a tool to an agent
 
-There are two independent layers. Both must let the tool through.
+There are two independent layers between a custom tool and a governed agent. Both must let
+the tool through.
 
-### 7.1 Tenant visibility — scope, and Tools → Manage
+### 7.1 Org/BU visibility: scope, and Tools → Manage
 
-A custom tool's own `scope.sharing` + `Owner Org` / `Owner BU` decide which tenants can
+A custom tool's own `scope.sharing` + `Owner Org` / `Owner BU` decide which Orgs and BUs can
 see and invoke it at all (§3). That is the mechanism to use.
 
 The per-Org/BU **Manage** button described in [the tool catalogue](./tool-catalogue.md) lives on the **Built-in tools**
 tab only, and that table is built from `TOOL_DEFINITIONS` — the hard-coded built-in
-catalogue (`ToolsPage.tsx:72-76`). **Custom tools do not appear there and cannot be
+catalogue. **Custom tools do not appear there and cannot be
 assigned from the UI.** The runtime *does* apply `isToolEnabled()` to the combined
-built-in + custom + MCP list (`src/services/llm/ask.ts:404-406`), so a row written
+built-in + custom + MCP list, so a row written
 directly into `itmip_tool_assignments` with a custom tool's name would take effect — but
 there is no supported path to create one, and the metadata-override editor is likewise
 built-ins-only. Use `scope` and the `Enabled` checkbox.
 
-### 7.2 Playbook scoping — Playbooks → edit → Routing & tools
+### 7.2 Agent scoping: Agents → edit → Routing & tools
 
-In the playbook editor, the **Routing & tools** tab (`TemplatesPage.tsx:698`) carries
-four fields (lines 1675-1706):
+In the agent editor, the **Routing & tools** tab carries four fields:
 
 | On-screen label | Field |
 |---|---|
@@ -673,9 +682,9 @@ four fields (lines 1675-1706):
 | `Allowed tools (explicit allowlist; union with the tag/category filters above)` | `allowed_tools` |
 | `Denied tools (subtracted after every other filter)` | `denied_tools` |
 
-The resolution order is in `filterToolsByTemplate` (`src/services/llm/ask.ts:128-164`):
+The resolution order:
 
-1. If the playbook sets **none** of `allowed_tools` / `tool_tag_filters` /
+1. If the agent sets **none** of `allowed_tools` / `tool_tag_filters` /
    `tool_category_filters` / `denied_tools`, the model is offered only the small
    **essentials set** (~21 built-ins) and discovers the rest on demand via
    `splunk_route_tools`. **Your custom tool is not in the essentials set** — see below.
@@ -686,22 +695,21 @@ The resolution order is in `filterToolsByTemplate` (`src/services/llm/ask.ts:128
 4. `denied_tools` is subtracted last and wins over everything except UNIVERSAL tools.
 
 The `Allowed tools` / `Denied tools` pickers autocomplete against the union of built-in,
-custom and MCP tool names for your Org/BU (`TemplatesPage.tsx:1528-1560`), so your custom
+custom and MCP tool names for your Org/BU, so your custom
 tool appears in the dropdown once saved. Free text is still accepted — a typo'd name is
 not rejected anywhere, it just never matches a tool, so copy the name rather than typing
 it.
 
 > **Tags and categories do not work for custom tools.** This is the one place where the
 > feature set does not line up. The `itmip_llm_custom_tools` collection has no
-> `category` or `tags_json` field (`default/collections.conf:380-399` — compare
-> `itmip_mcp_tools` at line 537, which has both), the editor has no field for them, and
-> `listCustomToolDefinitions` emits no `tags` or `categories`
-> (`src/services/tools.ts:14133-14145`). So `tool_tag_filters` and
-> `tool_category_filters` can **never match a custom tool**. `src/services/tools.ts:13828`
-> says so in as many words.
+> `category` or `tags_json` field (`[itmip_llm_custom_tools]` in
+> `default/collections.conf`; compare `[itmip_mcp_tools]` in the same file, which has
+> both), the editor has no field for them, and
+> the definitions handed to the model carry no `tags` or `categories`. So
+> `tool_tag_filters` and `tool_category_filters` can **never match a custom tool**.
 >
-> **The practical rule: name your custom tool explicitly in `allowed_tools`.** A
-> playbook scoped purely by tag will silently not advertise it.
+> **The practical rule: name your custom tool explicitly in `allowed_tools`.** An
+> agent scoped purely by tag will silently not advertise it.
 
 A custom tool that is not advertised up front can still be reached mid-conversation:
 `splunk_route_tools` includes custom tools in its catalogue and *adds* what it returns to
@@ -712,10 +720,9 @@ with no filters at all. That is another reason the description matters.
 ### 7.3 Name collisions
 
 The advertised list is deduplicated with **first occurrence wins**, and built-ins are
-prepended (`src/services/llm/ask.ts:388-403`). A custom tool named `splunk_run_search`
-is dropped with a console warning; it cannot hijack a built-in. At execution time the
-dispatcher routes built-in → MCP → custom in that order
-(`src/services/tools.ts:13985-14023`).
+prepended. A custom tool named `splunk_run_search` is dropped with a console warning;
+it cannot hijack a built-in. At execution time the dispatcher routes built-in → MCP →
+custom in that order.
 
 ---
 
@@ -724,28 +731,30 @@ dispatcher routes built-in → MCP → custom in that order
 Honest limits, roughly in order of how often they bite.
 
 **Only `http` is executable.** `implementation.type` accepts `http`, `splunk_search`,
-`kvstore_lookup` and `python` at validation (`itmip_llm_custom_tools.py:99`), but
-`SUPPORTED_IMPL_TYPES = {"http"}` (line 100) and `/invoke` returns **HTTP 501** for the
-other three (lines 1110-1111). The editor renders them as disabled options labelled
+`kvstore_lookup` and `python` at validation (`ALLOWED_IMPL_TYPES` in
+`bin/itmip_llm_custom_tools.py`), but `SUPPORTED_IMPL_TYPES = {"http"}` and `/invoke`
+returns **HTTP 501** for the other three. The editor renders them as disabled options labelled
 "coming in 0.5.x" — a label that has been wrong since 0.5.x shipped. Treat the three as
 reserved schema, not as a roadmap commitment.
 
 **Enterprise licence required.** `custom_http_tools` maps to `TIER_ENTERPRISE`
-(`bin/itmip_llm_license_tier.py:155`). Listing (GET) stays open so the UI can render the
-greyed state, but **authoring and every invocation** are refused server-side with HTTP
-403 `Custom HTTP tools require an Enterprise license.`
-(`itmip_llm_custom_tools.py:971-974`). That check is authoritative — a direct REST call
+(in `bin/itmip_llm_license_tier.py`). Listing (GET) stays open so the UI can render the
+greyed state, and deleting a definition stays open too, but **authoring and every
+invocation** are refused server-side with HTTP 403
+`Custom HTTP tools require an Enterprise license.` (`Handler.handle` in
+`bin/itmip_llm_custom_tools.py`). That check is authoritative: a direct REST call
 cannot bypass it. See the licensing reference.
 
 **Response size is hard-capped at 64 KB.** `HARD_MAX_BYTES = 64 * 1024`. The socket read
-stops there and sets `truncated: true` (lines 845-847); after the transform,
+stops there and sets `truncated: true`; after the transform and redaction,
 `response.max_bytes` (default 8192) is applied and is itself clamped to the hard cap
-(lines 874-881). Truncation is a **byte slice**, not a structural one — a truncated JSON
-body reaches the model as invalid JSON. If your upstream returns large payloads, a
+(both in `_http_invoke` in `bin/itmip_llm_custom_tools.py`). Truncation is a plain slice
+(of bytes at the socket, of characters of the serialised result after the transform),
+not a structural one: a truncated JSON body reaches the model as invalid JSON. If your upstream returns large payloads, a
 transform that projects the few fields you need is not optional.
 
 **No human confirmation gate, ever.** `GATED_TOOL_NAMES` is derived from the `gated` tag
-on `TOOL_DEFINITIONS` — built-ins only (`src/services/tools.ts:4512-4514`). A custom
+on the built-in tool definitions only. A custom
 tool with `method: "DELETE"` against a production API will be executed by the dispatcher
 with no confirmation modal, no matter what it does. Nothing in the definition can request
 one. **If a custom tool mutates anything you care about, the safety has to live upstream**
@@ -768,11 +777,12 @@ recycling resets them; SHC members do not share them. §2.6.
 `next` link means a second tool, or a model-driven second call with a different argument.
 
 **No response streaming, no file/binary handling.** The body is decoded as UTF-8 with
-replacement (line 854). Binary upstreams produce garbage.
+replacement. Binary upstreams produce garbage.
 
 **No versioning or rollback of definitions.** `version` is a label. Edits overwrite the
 KVStore row; the change is emitted to the KVStore changelog
-(`emit_change`, lines 1048-1057) but the previous definition is not recoverable from the
+(`emit_change`, called from `_handle_definitions` in `bin/itmip_llm_custom_tools.py`,
+which records the new row and not the old one), so the previous definition is not recoverable from the
 UI. Export the JSON before a risky edit.
 
 **Definitions are not backed up separately.** They live in the `itmip_llm_custom_tools`
@@ -789,18 +799,18 @@ A tool definition is plain JSON, and the round trip is symmetric.
 
 **Export** — open a tool, click **Export JSON** in the editor footer. The browser
 downloads `<tool_name>.json` containing the current *draft* — including unsaved edits —
-with `_key` stripped (`CustomToolsSection.tsx:363-375`).
+with `_key` stripped.
 
-**Import** — **Tools → Custom tools → Import JSON**, paste, **Import**. The modal
-(lines 1203-1292):
+**Import**: **Tools → Custom tools → Import JSON**, paste, **Import**. **Import** is enabled once the text parses; a parse error is shown under the field. The dialog:
 
 - merges the pasted object over `emptyCustomTool(orgShort, buShort)`, so anything the
   JSON omits gets the starter default rather than `undefined`;
 - **forces `_key: ""`** so the import always creates a fresh row and can never overwrite
   an unrelated tool by key;
-- leaves `scope` as whatever the JSON specified, falling back to the importer's own
-  Org/BU. The modal's own text says the importing Org/BU "defaults to X/Y" — that is
-  only true when the pasted JSON has no `scope`. **An exported `global`-scoped tool
+- merges `scope`, `implementation`, `response` and `guardrails` block by block, so a
+  JSON whose `scope` names only `sharing` keeps the importer's own Org/BU. The dialog's
+  text says the importing Org/BU "defaults to X/Y": that holds for whatever the JSON
+  leaves out. **An exported `global`-scoped tool
   stays `global` on import.** Check the scope after importing somebody else's
   definition.
 
@@ -830,4 +840,3 @@ will be honoured, silently, until somebody reads the audit log.
 - [the auditing guide](../security/auditing.md) — where custom-tool invocations sit in the wider audit
   picture.
 - the licensing reference — the per-feature capability matrix.
-- the security audit — the findings the controls above answer.

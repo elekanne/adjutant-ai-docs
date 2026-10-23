@@ -4,14 +4,14 @@ sidebar_position: 7
 
 # Tools — Adjutant AI
 
-**App version:** 2.5.9
+**App version:** 2.7.0
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins managing which tools the assistant may use, and how
 they are scoped per Org and Business Unit.
 
 ---
 
-## Tools vs Skills vs Playbooks — choosing the right layer
+## Tools vs Skills vs Agents: choosing the right layer
 
 Adjutant AI has three distinct layers that shape what the LLM does
 on your behalf. Knowing which layer to touch when you want to change
@@ -22,18 +22,18 @@ hour of doomed prompt-tweaking.
 
 | Layer | What it is | Kitchen analogue | Lives in | Touch it when… |
 |---|---|---|---|---|
-| **Tool** | An executable function the LLM can call (e.g. `splunk_run_search`, `splunk_create_dashboard_xml`). Granular by design — ~135 built-in (incl. the SSE security-content tools and the user-playbook authoring tools), plus your custom HTTP tools and MCP-imported tools. | Ingredient or utensil | `src/services/tools.ts` + the **Tools** tab | …you need a new *capability* the LLM doesn't have yet (talk to a new system, persist a new artifact kind). |
-| **Skill** | A reusable *prose rule* the LLM must follow ("no emojis in dashboards", "MLTK models follow the `aiworkbench` naming pattern", "every alert ships with a companion dashboard"). Pure text, no code. Pulled in front of the playbook body at prompt-fetch time. | Recipe-for-correctness — "always sear before braising" | `itmip_ai_skills` KVStore (NEW in 0.9.6) + the **Skills** tab | …a *cross-cutting rule* applies to 3+ playbooks and you want it to live in one place. |
-| **Playbook** | A specific use-case flow — workflow phases, form inputs, artifact naming for this exact task. Picks which skills it includes via the `includes_skills` field. | The meal plan — "Thursday night: chicken piccata" | `itmip_ai_use_cases` KVStore + the **Playbooks** tab | …you want to add or refine a *specific* end-user task, with its own questions and its own output shape. |
+| **Tool** | An executable function the LLM can call (e.g. `splunk_run_search`, `splunk_create_dashboard_xml`). Granular by design: 196 built-in (incl. the SSE security-content tools and the agent authoring tools), plus your custom HTTP tools and MCP-imported tools. | Ingredient or utensil | the app's built-in catalogue + the **Tools** tab | …you need a new *capability* the LLM doesn't have yet (talk to a new system, persist a new artifact kind). |
+| **Skill** | A reusable *prose rule* the LLM must follow ("no emojis in dashboards", "MLTK models follow the `aiworkbench` naming pattern", "a proof dashboard shows the artifact working"). Pure text, no code. Pulled in front of the agent's prompt at prompt-fetch time. | Recipe-for-correctness: "always sear before braising" | `itmip_ai_skills` KVStore (NEW in 0.9.6) + the **Skills** tab | …a *cross-cutting rule* applies to 3+ agents and you want it to live in one place. |
+| **Agent** | A governed agent, with every action gated and logged: a specific use-case flow (workflow phases, form inputs, artifact naming for this exact task). Picks which skills it includes via the `includes_skills` field. | The meal plan: "Thursday night: chicken piccata" | `itmip_ai_use_cases` KVStore + the **Agents** tab | …you want to add or refine a *specific* end-user task, with its own questions and its own output shape. |
 
 **Concrete rule of thumb:**
 
 - *"All my dashboards should use a colourblind-safe palette"* → that's
   a **skill** edit. Find `viz-best-fit`, add the rule to its body.
-  Every playbook that already includes `viz-best-fit` picks it up
-  for free; you don't need to touch any playbook.
+  Every agent that already includes `viz-best-fit` picks it up
+  for free; you don't need to touch any agent.
 - *"My new use case is 'help users debug their syslog ingestion'"* →
-  that's a **playbook**. Create a new playbook, declare its
+  that's an **agent**. Create a new agent, declare its
   `includes_skills: ["feed-health-verdict", "spl-perf-priorities",
   "spl-validation-loop", "metric-vs-event-index-aware"]`, write the
   workflow.
@@ -41,8 +41,8 @@ hour of doomed prompt-tweaking.
   → that's a **tool**. Create a custom HTTP tool (or register an
   MCP server) — see [Custom tools](#custom-tools) below.
 
-For the full architecture diagram + the 24-skill default catalogue,
-see [the tools and playbooks overview, §3.5](./tools-and-playbooks.md).
+For the full architecture diagram + the 53-skill default catalogue,
+see [the tools and agent templates overview, §3.5](./tools-and-playbooks.md).
 
 ---
 
@@ -69,17 +69,17 @@ and admin-only action buttons.
 
 ## Tool routing — minimum-budget by default
 
-The Ask flow does NOT broadcast the entire tool catalogue to the LLM
+A run does NOT broadcast the entire tool catalogue to the LLM
 on every question — that would balloon prompt tokens and confuse
 smaller models. Instead the dispatcher:
 
-1. Looks at the active playbook (if any). The playbook can declare
+1. Looks at the active agent (if any). The agent can declare
    `allowed_tools`, `denied_tools`, `tool_tag_filters`,
    `tool_category_filters` — those scope what the LLM is offered.
-2. If no playbook scope is set, the dispatcher exposes a small
+2. If no agent scope is set, the dispatcher exposes a small
    **essentials set** (~21 tools: core SPL/search, saved-search,
-   dashboard, alert, ML-probe, plus the universal version / playbook /
-   knowledge / router tools) — **not** all ~135. The model **discovers
+   dashboard, alert, ML-probe, plus the universal version / agent template /
+   knowledge / router tools), **not** all 196. The model **discovers
    and unlocks** the rest on demand by calling `splunk_route_tools`:
    that tool now *adds* the tools it returns to the live advertised set
    for the rest of the conversation (it doesn't merely list them), so
@@ -105,29 +105,42 @@ on every turn after the first. The Tokens & Costs tab surfaces the
 
 ## Built-in tool catalogue
 
-The dispatcher ships **182 built-in tools**. By source category
+The dispatcher ships **196 built-in tools**. By source category
 (a few tools carry two): `enterprise-security` 19 · `trackme` 19 ·
-`servicenow` 16 · `dashboards-studio` 15 · `itsi` 15 ·
-`dashboards-simplexml` 11 · `splunk-core` 5 · `ai-toolkit` 5 ·
-`knowledge-objects` 5 · `data-onboarding` 5 · `templates` 4 ·
-`knowledge` 4 · `security-content` 4 · `visualizations` 2 · `alerts` 2 ·
-`metrics` 1 · `search` 1 · `routing` 1. The friendly groupings below are
-**non-exhaustive examples** — the **Tools** tab is the source of truth:
+`servicenow` 17 · `itsi` 16 · `dashboards-simplexml` 15 ·
+`dashboards-studio` 15 · `data-onboarding` 12 · `knowledge-objects` 12 ·
+`network-policy` 13 · `fraud` 10 · `splunk-core` 9 · `ai-toolkit` 8 ·
+`search` 8 · `knowledge` 5 · `security-content` 5 · `templates` 5 ·
+`data-platform` 3 · `alerts` 2 · `dashboards-compiler` 2 ·
+`visualizations` 2 · `metrics` 1 · `routing` 1.
+
+> These numbers are checked against the shipped tool list on every build,
+> so a tool added without a documentation update fails the build. They were last wrong by
+> four tools and six categories, which is why the check exists: a stale
+> catalogue reads exactly like an accurate one.
+
+The friendly groupings below are **non-exhaustive examples** — the
+**Tools** tab is the source of truth:
 
 | Category | Examples |
 |---|---|
-| `search` | `splunk_run_search`, `splunk_run_saved_search_by_name`, `splunk_run_saved_search`, `splunk_count_events`, `splunk_top_values` |
+| `search` | `splunk_run_search`, `splunk_term_check`, `splunk_metadata`, `splunk_walklex`, `splunk_typeahead`, `splunk_validate_full_range`, `splunk_run_saved_search_by_name` |
 | `metadata` | `splunk_list_indexes`, `splunk_list_metrics`, `splunk_list_sourcetypes`, `splunk_list_sources`, `splunk_list_hosts`, `splunk_describe_sourcetype` |
-| `dashboard` | **Simple XML (classic)**: `splunk_create_dashboard_xml` / `splunk_update_dashboard_xml` / `splunk_get_dashboard_xml` / `splunk_get_dashboard_panel_data` for hand-written XML, plus the **Simple XML builder family** (v1.4.0, `src/services/xmlBuilder.ts`): `splunk_xml_create`, `splunk_xml_add_input`, `splunk_xml_add_panel`, `splunk_xml_update_panel`, `splunk_xml_remove_panel`, `splunk_xml_preview`, `splunk_xml_publish` — the model composes a dashboard via small typed calls (RAW SPL in, escaped XML out) so it never hand-writes the whole `<dashboard>` blob (no output-token truncation, no manual-escaping bugs), with per-panel `full_width`/`row` layout for shareable/printable evidence dashboards. **Dashboard Studio (JSON)** has its own builder family (`splunk_builder_create_dashboard`, `splunk_builder_add_time_picker`, `splunk_builder_add_dropdown`, `splunk_builder_add_data_source`, `splunk_builder_add_visualization`, `splunk_builder_position`, `splunk_builder_preview`, `splunk_builder_publish`) plus persistence (`splunk_create_dashboard_studio_json`, `splunk_update_dashboard_studio_json`, `splunk_get_dashboard_studio_json`, `splunk_check_studio_runtime`). The full pipeline (playbook → builder → validation chain → on-disk artifact) and the known failure modes are documented in the Dashboard Studio guide. The Studio playbook currently ships as `draft` (v0.9.5) — see that doc's §10 for promotion criteria. |
+| `dashboard` | **Simple XML (classic)**: `splunk_create_dashboard_xml` / `splunk_update_dashboard_xml` / `splunk_get_dashboard_xml` / `splunk_get_dashboard_panel_data` for hand-written XML, plus the **Simple XML builder family** (v1.4.0): `splunk_xml_create`, `splunk_xml_add_input`, `splunk_xml_add_panel`, `splunk_xml_update_panel`, `splunk_xml_remove_panel`, `splunk_xml_preview`, `splunk_xml_publish`. The model composes a dashboard via small typed calls (RAW SPL in, escaped XML out) so it never hand-writes the whole `<dashboard>` blob (no output-token truncation, no manual-escaping bugs), with per-panel `full_width`/`row` layout for shareable/printable evidence dashboards. **Dashboard Studio (JSON)** has its own builder family (`splunk_builder_create_dashboard`, `splunk_builder_add_time_picker`, `splunk_builder_add_dropdown`, `splunk_builder_add_data_source`, `splunk_builder_add_visualization`, `splunk_builder_position`, `splunk_builder_preview`, `splunk_builder_publish`) plus persistence (`splunk_create_dashboard_studio_json`, `splunk_update_dashboard_studio_json`, `splunk_get_dashboard_studio_json`, `splunk_check_studio_runtime`). The full pipeline (agent → builder → validation chain → on-disk artifact) and the known failure modes are documented in the Dashboard Studio guide. The Studio agent template currently ships as an agent template in preview (`draft`, since v0.9.5); see that doc's §10 for promotion criteria. |
 | `alerting` | `splunk_create_alert`, `splunk_list_saved_searches`, `splunk_get_saved_search` |
-| `mltk` | `splunk_train_mltk_model`, `splunk_apply_mltk_model`, `splunk_share_mltk_model_globally`, `splunk_list_mltk_models` |
-| `es` (Splunk Enterprise Security) | `es_list_notables`, `es_get_notable`, `es_update_notable`, `es_add_investigation_note`, `es_list_correlation_searches`, `es_run_correlation_search` |
-| `itsi` | `itsi_list_episodes`, `itsi_get_episode`, `itsi_update_episode`, `itsi_list_services`, `itsi_list_kpis`, `itsi_get_kpi_health` |
+| `mltk` | `splunk_share_mltk_model_globally`, `splunk_list_ml_models`, `splunk_check_ml_capabilities`, `splunk_proof_snapshot` — training and scoring are SPL (`fit` / `apply`) the assistant writes and runs through `splunk_run_search`, not separate tools |
+| `es` (Splunk Enterprise Security) | `es_list_notables`, `es_get_notable`, `es_update_notable`, `es_add_investigation_note`, `es_list_correlation_searches`, `es_get_correlation_search` |
+| `itsi` | `itsi_list_episodes`, `itsi_get_episode`, `itsi_update_episode`, `itsi_list_services`, `itsi_list_kpis`, `itsi_get_kpi`, `itsi_get_kpi_search` |
 | `trackme` | `trackme_list_entities`, `trackme_get_entity`, `trackme_ack_entity`, `trackme_update_entity_priority`, `trackme_update_maintenance` |
-| `security-content` (Splunk Security Essentials, 1.2.0) | `sse_check_prerequisites`, `sse_list_content`, `sse_get_detection`, `sse_enrich_id`, `sse_enrich_alert` — reach SSE's content catalogue + real detection SPL via SSE's `sseanalytics`/`sseidenrichment`/`sselookup` commands; only return content when SSE is installed and visible to the user. See [the tools and playbooks overview](./tools-and-playbooks.md) §4.17. |
-| `data-onboarding` (Data Foundation, 1.5.0) | **Authoring (Professional+, `data_onboarding`):** `splunk_generate_conf_package` (draft a deployment-ready 4-app config package — props/transforms/inputs/tags/serverclass — and return a downloadable `.tar.gz`), `splunk_validate_props_conf` / `splunk_validate_transforms_conf` (validate a stanza against the authoritative `*.conf.spec`), `splunk_compute_data_quality_score` (0–100 + A–F grade across Magic 8 / props / transforms / timestamps / line-breaking / CIM). **Ingestion-health CHECKS (all tiers as of 1.7.1):** `splunk_check_ingest_health` (per-sourcetype ingest/parse errors read from `_internal` as the system user) + `splunk_check_cribl_ingest_health` (the Cribl monitoring index) + `splunk_check_edge_processor_health` *(1.8.2 — the Splunk Edge Processor operational-metrics index, `sourcetype=edge-metrics`, read via `\| mstats`; sibling of the Cribl check)* — no licence gate; bounded only by Splunk role + index ACL. See [the tools and playbooks overview](./tools-and-playbooks.md). |
-| `servicenow` (ServiceNow integration, 1.7.0; **Professional + `servicenow`**) | 16 server-side tools — reads (`servicenow_get_incidents`/`_get_incident`/`_get_changes`/`_get_problems`, CMDB/CSDM `servicenow_cmdb_list_classes`/`_cmdb_get_records`/`_cmdb_describe_table`/`_cmdb_related`, generic `servicenow_table_get`), writes (`servicenow_create_incident`/`_update_incident`/`_create_event`/`_cmdb_upsert`), and SIR security incidents (`servicenow_get_security_incidents`/`_create_security_incident`/`_update_security_incident` on `sn_si_incident`, only when the Org sets `sir_enabled`). Configure under **Tools → ServiceNow**, not as a custom HTTP tool — see the callout under [Custom tools](#custom-tools) and [the ServiceNow guide](../integrations/servicenow.md). |
-| `templates` | `splunk_list_use_case_templates`, `splunk_get_use_case_template`, `splunk_route_tools` |
+| `security-content` (Splunk Security Essentials, 1.2.0) | `sse_check_prerequisites`, `sse_list_content`, `sse_get_detection`, `sse_enrich_id`, `sse_enrich_alert`: reach SSE's content catalogue + real detection SPL via SSE's `sseanalytics`/`sseidenrichment`/`sselookup` commands; only return content when SSE is installed and visible to the user. See [the tools and agent templates overview](./tools-and-playbooks.md) §4.17. |
+| `data-onboarding` (Data Foundation, 1.5.0) | **Authoring (Professional+, `data_onboarding`):** `splunk_generate_conf_package` (draft a deployment-ready 4-app config package of props/transforms/inputs/tags/serverclass and return a downloadable `.tar.gz`), `splunk_validate_props_conf` / `splunk_validate_transforms_conf` (validate a stanza against the authoritative `*.conf.spec`), `splunk_compute_data_quality_score` (0–100 + A–F grade across Magic 8 / props / transforms / timestamps / line-breaking / CIM). **Ingestion-health CHECKS (all tiers as of 1.7.1):** `splunk_check_ingest_health` (per-sourcetype ingest/parse errors read from `_internal` as the system user) + `splunk_check_cribl_ingest_health` (the Cribl monitoring index) + `splunk_check_edge_processor_health` *(1.8.2: the Splunk Edge Processor operational-metrics index, `sourcetype=edge-metrics`, read via `\| mstats`; sibling of the Cribl check)*. No licence gate; bounded only by Splunk role + index ACL. See [the tools and agent templates overview](./tools-and-playbooks.md). |
+| `servicenow` (ServiceNow integration, 1.7.0; **Professional + `servicenow`**) | 17 server-side tools — reads (`servicenow_get_incidents`/`_get_incident`/`_get_changes`/`_get_problems`/`_get_journal`, CMDB/CSDM `servicenow_cmdb_list_classes`/`_cmdb_get_records`/`_cmdb_describe_table`/`_cmdb_related`, generic `servicenow_table_get`), writes (`servicenow_create_incident`/`_update_incident`/`_create_event`/`_cmdb_upsert`), and SIR security incidents (`servicenow_get_security_incidents`/`_create_security_incident`/`_update_security_incident` on `sn_si_incident`, only when the Org sets `sir_enabled`). Configure under **Tools → ServiceNow**, not as a custom HTTP tool — see the callout under [Custom tools](#custom-tools) and [the ServiceNow guide](../integrations/servicenow.md). |
+| `templates` | `splunk_list_use_case_templates`, `splunk_get_use_case_template_prompt`, `splunk_route_tools` |
+| `network-policy` (firewall policy ingestion) | Thirteen tools, **three vendors**, one ordered chain — acquire, parse, normalise, then read. Everything from `firewall_policy_normalize` onward is **vendor-neutral**; only intake is vendor-specific. **Cisco:** `cisco_asa_config_collect` (import ASA config text; does **not** log in to a device), `cisco_device_configuration_acquire` (SSH to an **approved** device, fixed read-only command profile), `cisco_fmc_collect` (an FMC access-control collection, pre-fetched or live from a saved connection), `cisco_asa_config_parse`, `firewall_policy_normalize` (into the vendor-neutral canonical schema — this is where ASA and FMC become the same model), `firewall_rule_expand` (effective tuples, bounded with explicit truncation), `firewall_policy_diff` (change set between two **complete** snapshots), `firewall_policy_export` (a versioned JSON export a consumer reads without touching Adjutant's stores), `firewall_policy_store` (persist to index history and/or KV current state). **Fortinet:** `fortinet_config_collect` (import FortiOS `show full-configuration` text) and `fortinet_config_parse`, which produces the **same** vendor-neutral entities the ASA parser does, so a FortiGate snapshot is comparable to an ASA one by construction rather than by convention. **Palo Alto:** `panos_config_collect` (import PAN-OS `show config running` in **set format** — the default curly-brace output is a different grammar) and `panos_config_parse`, which records rather than flattens the two constructs the canonical model cannot express: App-ID narrowing and a negated address. Three of the thirteen are write tools needing an action grant — see [Runner-side tools](#runner-side-tools--the-gate-is-the-action-grant-not-the-tool-list). Two properties are worth knowing before you read a result: a **tuple is not proof of reachability**, and **deletions are computed by comparing two snapshots, never read from the device** — if either snapshot is incomplete, removals come back as `removed_unconfirmed` rather than as removals. |
+| `fraud` | Ten tools, end to end. Readiness first (`splunk_audit_fraud_readiness`: which fraud use cases this estate can support **from real events**, matching sources by content signature rather than sourcetype name), then `fraud_risk_plan` (detects whether ES is installed rather than asking). Then the **two-tier** rule model that fraud actually needs: `fraud_generate_risk_rule` contributes weight for a resolved entity, `fraud_generate_notable_rule` accumulates it per entity over a window and requires two or more rule **families**. `fraud_risk_ring_scan` covers what accumulation structurally cannot: a ring is many entities sharing one value, not one entity across many events. Plus identity resolution (`fraud_canonicalize_identifiers`, `fraud_shared_attribute_pivot`, `fraud_velocity_travel`) and migration from the retiring Splunk fraud apps (`fraud_migration_discover`, `fraud_migrate_content`). Every generator returns reviewable SPL with `disabled=1`; nothing is enabled, scheduled or deployed. See [the tools and agent templates overview](./tools-and-playbooks.md) §4.22. |
+| `dashboards-compiler` | `splunk_compile_dashboard` builds and publishes a dashboard from an **intermediate representation in one call**, owning base-search factoring, token binding, XML escaping and layout geometry. It replaces the whole `splunk_xml_*` sequence for agents carrying this category. `splunk_revise_dashboard` patches an already-published dashboard by `artifact_fingerprint`; only presentational and narrative fields are patchable and anything structural is refused by name. See [the tools and agent templates overview](./tools-and-playbooks.md) §4.23 and the Dashboard Studio guide. |
+| `data-platform` | `splunk_mapping` — read and **author** integration mapping specs (source → transforms → destination). `operation=put` can only ever create a **draft**; a human promotes it under four-eyes in the **Mappings** tab. Lint runs server-side and rejects a bad spec with its findings. `operation=check_drift` compares a mapping's declared fields against the fields actually read. Plus `profiling_capabilities`, `profiling_build_profile`. |
+| `knowledge` | `splunk_memory`: persistent memory per Org/BU, scoped server-side to the caller's Org/BU (a scope passed in arguments is ignored). Two record types: `learned_fact` (durable facts about this environment, stored **unconfirmed** until a human confirms them in the **Learned Knowledge** tab but usable immediately, with a BU→Org fallback on read) and `integration_state` (an integration's resume watermark per resource; advance it only **after** the data it covers is durably written). Plus the four knowledge-retrieval tools described in [the tools and agent templates overview](./tools-and-playbooks.md) §4.16. |
 
 Every built-in is read-only by default — the small number of
 write-capable tools (`splunk_create_dashboard_xml`,
@@ -136,12 +149,17 @@ write-capable tools (`splunk_create_dashboard_xml`,
 structured `{ok, kind, name, action, url}` result so the "Created in
 Splunk" panel can show direct drilldown links.
 
-### Click **Manage** to enable / disable per tenant
+### Click **Manage** to enable / disable per Org and BU
 
-For each built-in tool you can add per-Org / per-BU enable/disable
+**Manage** opens the **Manage tool** dialog. It has two tabs, **Metadata** and **Availability**, and is left only
+through **Cancel** or **Save changes**: a click beside it or Escape does nothing, so an edit is never lost by
+accident. **Save changes** stays disabled until something changed, and a changed tab says **changed**.
+
+On the **Availability** tab you can add per-Org / per-BU enable/disable
 rules. The dispatcher's `isToolEnabled()` consults them when deciding
 what to advertise to the LLM AND again at `executeTool()` time
-(defence in depth — see SECURITY_AUDIT M4).
+(defence in depth: a call to a disabled tool is refused even if the
+model asks for a tool it was never offered).
 
 Most-specific rule wins:
 
@@ -160,20 +178,23 @@ Use cases:
 ### Per-tool metadata overrides
 
 Every built-in tool ships with a tag list, a category list, and a
-one-line short description hard-coded in `src/services/tools.ts`. If
-those defaults don't fit your environment you can override them via
-the **Metadata override** fieldset in the per-tool modal:
+one-line short description built into the app. If
+those defaults don't fit your environment you can override them on
+the **Metadata** tab of the **Manage tool** dialog:
 
 | Field | Behaviour |
 |---|---|
 | Tags | Multi-select. Adds/replaces the built-in tag list. |
 | Categories | Multi-select. Adds/replaces the built-in category list. |
 | Short description | Free text. Replaces the LLM-facing summary. |
+| Short description (concise variant) | Free text, at most 120 characters. Used when Concise Mode is on. |
 
 Overrides are persisted to the `itmip_tool_overrides` KVStore
 collection (one row per `tool_name`). The runtime merges overrides on
-top of the built-in defaults at app-load time. If all three fields
-match the defaults the row is deleted (no orphan rows). A small
+top of the built-in defaults at app-load time. If all four fields
+match the defaults the row is deleted (no orphan rows). **Reset to built-in
+defaults** puts the built-in values back in the dialog, all four of them;
+nothing is written until **Save changes**, which then removes the row. A small
 **overridden** badge next to a tool's name in the table tells you
 which rows have an active override.
 
@@ -189,7 +210,7 @@ CMDBs, internal wikis, threat-intel APIs, anything that speaks HTTP.
 > need to hand-author custom-HTTP tools for ServiceNow: Adjutant AI ships a built-in
 > `servicenow` tool category (incidents, changes, problems, CMDB/CSDM with bounded
 > relationship traversal, SIR security incidents, events), curated CSDM/code knowledge,
-> a deterministic incident-description renderer, alert-driven playbooks with
+> a deterministic incident-description renderer, alert-driven agent templates with
 > bi-directional write-back, and per-Org REST **or** MCP transport — gated at
 > **Professional + the `servicenow` feature**. Configure it under **Tools → ServiceNow
 > connections**. Full guide: **[the ServiceNow guide](../integrations/servicenow.md)**. Custom-HTTP tools remain
@@ -197,25 +218,31 @@ CMDBs, internal wikis, threat-intel APIs, anything that speaks HTTP.
 
 ### Authoring a tool
 
-Click **+ Add custom tool**. The editor walks you through six blocks:
+Click **+ Add custom tool**. The editor has six tabs: **General**, **Parameters**, **Request**, **Network**,
+**Response and limits** and **Test**. It is left only through **Cancel** or **Create** (**Save changes** for an
+existing tool). Each field is checked as you type, with the same rule and wording the server applies: a tab with
+a problem says **has errors**, the problem is shown under its field, and the save button stays disabled and names
+the tabs to fix. What the tabs hold:
 
 1. **Identity** — `name` (lowercase, snake_case, becomes the
    function-name the LLM sees), `version` (semver), `title`,
    `description`. The description is the *only* prose the LLM sees —
    make it specific and tell the model when to call this tool.
-2. **Scope** — `sharing` (`private` = owner Org+BU only, `app` =
-   whole owner Org, `global` = every Org), and the owning Org / BU.
-   Default is your own Org/BU.
+2. **Scope** (on **General**) — `sharing` (`private` = owner Org+BU only, `app` =
+   whole owner Org, `global` = every Org), and the owning Org / BU, chosen
+   from your Organisations and Business Units under **Who may use this tool?**.
+   Default is your own Org/BU. A private tool needs its Business Unit.
 3. **Parameters** — a JSON Schema draft-07 object. Whatever
    properties you declare here become the arguments the LLM must
    supply when calling the tool. The schema reaches the LLM
    verbatim, so describe each property clearly.
 4. **Implementation** — for 0.4.0+ the supported type is `http`.
    Fill in `method`, `url`, optional `query` and `headers` maps, the
-   `auth` block (see §"Credential management" below), the optional
-   `proxy_url` / `proxy_credential_ref` / `tls_ca_pem_ref` for
-   environments behind a corporate egress (0.7.0+), `timeout_seconds`,
-   and the required `allowed_hosts` allowlist.
+   `auth` block (see §"Credential management" below), `timeout_seconds`,
+   the required `allowed_hosts` allowlist and, for POST, PUT and PATCH, the
+   **Request body** (JSON is sent as JSON, anything else as text). The
+   optional `proxy_url` / `proxy_credential_ref` / `tls_ca_pem_ref` for
+   environments behind a corporate egress (0.7.0+) are on the **Network** tab.
 5. **Response shaping** — optional `jq` or `jsonpath` transform plus
    a `max_bytes` cap. Use this to strip noise out of large responses
    before they reach the LLM (an unfiltered ServiceNow incident
@@ -246,16 +273,16 @@ unless `implementation.allow_internal: true` is set.
 Tool definitions never contain secrets. Instead, the `auth` block
 references secrets stored in Splunk's `storage/passwords` under realm
 `itmip_llm_assistent_app`. v0.7.0 added a **credential model** so a
-single tool definition can route per-tenant or per-user without
+single tool definition can route per Org/BU or per user without
 needing one tool definition per credential:
 
 | credential_model | What it means | `credential_ref(_template)` example |
 |---|---|---|
 | `global` (default) | One secret for all callers. | `confluence_default` |
 | `per_tenant` | Resolve to a different secret per caller's (Org, BU). The template uses `{org}` / `{bu}` placeholders, lowercased + stripped to `[a-z0-9_-]`. | `confluence_{org}_{bu}` resolves to `confluence_acme_ops` for caller in Org=ACME, BU=OPS. |
-| `per_user` | Resolve to a different secret per caller's Splunk user. **Schema-only in 0.7.0** — the OAuth runtime that mints these secrets ships in v0.9.0. Until then, `per_user` tools are visible to the LLM but return a structured `{ok:false, error:"no_user_credential", auth_url: null}` at invoke time. | `github_user_{user}` |
+| `per_user` | Resolve to a different secret per caller's Splunk user. **Schema-only:** 2.7.0 has no runtime that mints these secrets. `per_user` tools are visible to the LLM, and a caller with no stored secret gets a structured `{ok:false, error:"no_user_credential", auth_url: null}` at invoke time. See [the custom tools guide](./custom-tools-authoring.md), §5. | `github_user_{user}` |
 
-Per-tenant tools whose template resolves to a credential that **does
+`per_tenant` tools whose template resolves to a credential that **does
 not exist** in `storage/passwords` are dropped from the LLM's
 advertised list — they're never visible-and-broken. The Tools tab
 shows the resolution status next to each tool row.
@@ -277,11 +304,11 @@ the same builder backs the MCP client too, so a proxy or custom CA
 configured for a custom tool also works for MCP servers using the
 same env.
 
-### Save & test
+### Save and test
 
-The editor includes an in-UI **Save & test** button. Type a sample
-arguments JSON, click the button, and you'll see the transformed
-response inline. The full request goes through the same /invoke path
+On the editor's **Test** tab, type a sample arguments JSON and click **Save and test**. It saves the tool
+first, so the call runs what is on screen, keeps the dialog open, and shows the transformed response inline.
+It is enabled only when every tab is valid. The full request goes through the same /invoke path
 the LLM will use — what you see is exactly what the LLM will see.
 
 ### Import / Export
@@ -289,7 +316,7 @@ the LLM will use — what you see is exactly what the LLM will see.
 Tool definitions are pure JSON. Use **Export JSON** to download a
 finished definition; paste it into another environment via **Import
 JSON**. The importing Org/BU is set to the importer's resolved
-tenant by default — edit afterwards if you want wider scope.
+Org/BU by default; edit afterwards if you want wider scope.
 
 ### Audit trail
 
@@ -309,12 +336,12 @@ from cached responses or unauthenticated tools. Query from SPL with
 `| inputlookup itmip_llm_custom_tool_calls`. The audit log is
 admin-only.
 
-### Reserved (coming later)
+### Reserved implementation types
 
 The `implementation.type` field also reserves `splunk_search`,
 `kvstore_lookup`, and `python`. These are recognised by the schema
-validator but rejected at /invoke time with HTTP 501 until they
-ship.
+validator but rejected at /invoke time with HTTP 501. Only `http`
+runs.
 
 ---
 
@@ -524,7 +551,8 @@ In the **Edit MCP server** or **Edit custom HTTP tool** dialog:
 
 - **TLS CA ref** → `upstream_internal_ca` (whatever you typed in
   step 2's `name=`).
-- Save. Hit **Test connection** / **Save & test**.
+- Save. Use **Test connection + list tools** (the MCP server's **Tools** tab) or **Save and test**
+  (the custom tool's **Test** tab).
 
 ### Step 4 — proving the PEM works (before blaming the dispatcher)
 
@@ -639,7 +667,7 @@ certificate verification** as a fallback and you're moving.
 ## Custom tools / MCP behind an IAM gateway
 
 If a custom tool or MCP server needs to reach a target fronted by a
-corporate IAM gateway (WebEAM.Next, Ping, Okta-as-reverse-proxy,
+corporate IAM gateway (WebEAM, Ping, Okta-as-reverse-proxy,
 AzureAD, internal SAML proxy) that accepts only short-lived tokens
 minted by a client-credentials flow, static credentials aren't
 enough — those tokens expire. Tick the **"Use customer auth hook for
@@ -670,10 +698,12 @@ Composition rules:
 - Cache hits do NOT re-run the hook (response is served from the
   per-(tool, args) cache). The audit row's `customer_auth_used`
   field distinguishes fresh gateway calls from cache hits.
-- Caching is per-(tool, args) and currently NOT scoped per user. If
-  your hook attaches user-specific identity (e.g. routes a per-user
-  OAuth token), set `guardrails.cache_ttl_seconds = 0` on the tool
-  to disable caching.
+- The cache key follows the tool's credential model. With the `global`
+  model it is (tool, args) and is **not** scoped per user or per Org;
+  with `per_tenant` it is (tool, Org, BU, args); with `per_user` it is
+  (tool, user, args). If a `global` tool's hook attaches user-specific
+  identity (for example a per-user OAuth token), set
+  `guardrails.cache_ttl_seconds = 0` on the tool to disable caching.
 
 The **IAM** pill next to a tool's name in the Tools tab indicates
 the hook is enabled for that tool.
@@ -683,6 +713,73 @@ run it directly with Splunk's bundled Python — the `__main__` block
 at the bottom of `customer_authorisation.py` calls the hook with an
 LLM-flow stub, a tool-flow stub, and an MCP-flow stub and prints
 the returned headers.
+
+---
+
+## Runner-side tools — the gate is the action grant, not the tool list
+
+Two tools exist that you will **not** find on the **Tools** tab, cannot
+enable or disable per Org/BU, and will not see in the 196 counted above.
+They are advertised by the **unattended integration runner** to a
+scheduled integration, not by the interactive dispatcher:
+
+| Tool | Advertised when | What it does |
+|---|---|---|
+| `splunk_writer` | the integration contract resolves to a non-empty **output allowlist** | Lands a batch of records into one Splunk destination: `kvstore` (idempotent upsert via key fields), `index_hec`, `index_spool` or `index_metric`. Destinations are restricted to the contract's allowlist and the tool cannot widen it. The writer never creates indexes. |
+| `network_input_source_discover` | the Org has the network-policy surface | Proposes input sources from what an approved device reports about its neighbours (CDP/LLDP on IOS and NX-OS, security contexts on a multi-context ASA, managed device records from FMC). Writes rows with status `proposed`, **no credential and no adapter**: it can never add, approve or credential a source. |
+
+### Which field actually decides what a scheduled integration can do
+
+`allowed_tools` and `allowed_actions` are different fields answering
+different questions, and the distinction matters most on the unattended
+path:
+
+- **`allowed_tools`** shapes what the **interactive** dispatcher
+  advertises to the model — see [Tool routing](#tool-routing--minimum-budget-by-default).
+  The unattended runner builds its own tool list from the integration
+  contract instead, so an agent's `allowed_tools` does not narrow an
+  unattended run.
+- **`allowed_actions`** on the integration contract is the control over
+  **writes**, on both paths. It is default-deny and checked immediately
+  before dispatch: a write tool whose action is not granted is refused,
+  not merely hidden.
+
+So when you are reasoning about what a scheduled integration can do, read
+its `allowed_actions`. Five tools carry an action that must be granted
+there; the read-only tools in the chain are bounded by licence capability
+and Org/BU scope instead:
+
+| Action | Effect if granted |
+|---|---|
+| `cisco_fmc_collect` | opens an authenticated HTTPS session to a firewall manager |
+| `cisco_device_configuration_acquire` | opens an SSH session to an approved device |
+| `network_input_source_discover` | writes `proposed` source rows |
+| `firewall_policy_store` | persists a snapshot to an index and/or KV current state |
+| `splunk_writer` | lands records into a destination on the contract's allowlist |
+
+The writer's `write_mode` accepts `upsert` and `append` only. There is
+deliberately no whole-collection replace: removing records is a separate,
+explicitly scoped operation, so a batch that arrives short cannot delete
+what it did not carry.
+
+### Where the three integration surfaces sit
+
+The two tools above plus `splunk_mapping` and `splunk_memory` are the
+four tools a scheduled integration actually runs on, and only the last
+two are also reachable interactively:
+
+| Surface | Interactive (Tools tab) | Unattended runner |
+|---|---|---|
+| `splunk_mapping` — the contract | yes (`data-platform`) | yes, advertised to every integration |
+| `splunk_memory` — watermarks and learned facts | yes (`knowledge`) | yes, advertised to every integration |
+| `splunk_writer` — landing records | **no** | only with an output allowlist |
+| `network_input_source_discover` | **no** | Orgs with the network-policy surface |
+
+A scheduled integration run is one ordered plan, not a conversation: read
+the mapping, read the watermark, acquire, normalise, land through the
+writer, read back, and only then advance the watermark. The order is the
+point — a watermark advanced before the read-back has confirmed the write
+is a resume point past data that was never stored.
 
 ---
 

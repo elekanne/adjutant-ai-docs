@@ -4,12 +4,12 @@ sidebar_position: 2
 
 # Admin manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 1.8.0 — **role model and tab inventory refreshed for 2.5.9**
-**Last updated:** 2026-09-22
+**App version:** 2.7.0
+**Last updated:** 2026-10-12
 **Audience:** Splunk users holding `admin`, `splunk_admin` **or** `sc_admin`
 on the search head where this app is installed. Those three are the whole
 list — `bin/itmip_llm_common.py` `ADMIN_ROLES` is the single source of truth,
-and `src/services/splunkContext.ts` mirrors it.
+and the browser UI mirrors it.
 
 > **⚠️ If you administer Splunk Cloud, read this first.**
 >
@@ -20,7 +20,7 @@ and `src/services/splunkContext.ts` mirrors it.
 > `metadata/default.meta`), but the browser checked only `admin` and
 > `splunk_admin`, so a Cloud administrator passed every server-side check and
 > was still shown the **end-user** app: no Playbooks, Skills, Knowledge, Input
-> Sources, Scheduled Ask, Tokens & Costs, Orgs & BUs, Tools, Models, Audit,
+> Sources, Unattended, Tokens & Costs, Orgs & BUs, Tools, Models, Audit,
 > License or Backups tab. Two screens even said *"You need admin or sc_admin
 > role"* to someone holding `sc_admin`.
 >
@@ -28,39 +28,39 @@ and `src/services/splunkContext.ts` mirrors it.
 > **unassigned** and grey the whole app out while splunkd considered them
 > assigned — which reads as a broken install rather than a role problem.
 >
-> **Fixed in 2.5.9**, and pinned by `tests/python/test_admin_roles_mirror.py`
-> so the two halves cannot drift apart again. **On any earlier build**, the
+> **Fixed in 2.5.9**, and pinned by an automated test so the two halves
+> cannot drift apart again. **On any earlier build**, the
 > workaround is to grant `admin` alongside `sc_admin`.
 
 > **A note on this manual's currency.** The role model and the tab inventory
-> below are correct for **2.5.9**. The rest of the document was last given a
+> below are correct for **2.7.0**. The rest of the document was last given a
 > full pass at **1.8.0**, so individual sections may lag — where a subject has
-> its own document (Tools, Models, Scheduled Ask, stateless operation,
+> its own document (Tools, Models, Unattended, stateless operation,
 > licensing), that document is newer and wins.
 
 > **About this app — read first.** Adjutant AI is a *host shell*: a
 > single-page React app that has **no use-cases of its own**. Every
-> piece of functionality it offers — which playbooks appear, which
+> piece of functionality it offers (which governed agents appear, which
 > LLMs are reachable, which tools the LLM may call, where saved
-> searches / dashboards / alerts land — is fully derived from
+> searches / dashboards / alerts land) is fully derived from
 > **(a) the Splunk app the user opened it from** and **(b) the Splunk
 > roles that user holds**. End users should reach the assistant from
 > within Search / ITSI / Enterprise Security / your custom or MSP
 > customer apps via a nav-menu entry — they should **not** be pointed
 > at the `itmip_ai_splunk_assistent_app` tile directly. The whole
-> point of the Workbench is to deliver an AI assistant *inside other
+> point of the Workbench is to deliver governed agents *inside other
 > apps, for other users*, with all generated knowledge objects landing
 > in those apps' namespaces. See
 > [the installation guide, Deployment model](./installation.md)
-> and the **Multi-tenant namespace model** section below for the full
+> and the **Multi-Org namespace model** section below for the full
 > rationale.
 
 This document covers **only** the parts of the app that an admin sees
-that an end user doesn't. For everything an end user sees — the Ask
-tab, History, Settings, attaching references, picking playbooks, the
-guardrail behaviour — read [the user manual](../user/user-manual.md) first.
+that an end user doesn't. For everything an end user sees (the Console
+tab, History, Settings, attaching references, picking agents, the
+guardrail behaviour), read [the user manual](../user/user-manual.md) first.
 
-## Multi-tenant namespace model — design assumption
+## Multi-Org namespace model: design assumption
 
 Adjutant AI is designed to be **embedded in the navigation menu of
 every Splunk app it serves**, not consumed as a standalone tile. The
@@ -87,32 +87,34 @@ expected install pattern:
    tenancy. The message text comes from
    `[ui] unassigned_message` in `local/itmip_ai_workbench.conf`
    (default is generic; you should customise it with your actual
-   contact instructions).
+   contact instructions). The server enforces this too: every endpoint
+   that reads or writes an Organisation's data answers such a user with
+   HTTP 403 and the same message, so a direct REST call cannot reach
+   DFLT/DFLT's data either.
 
 Design rationale: the Workbench is one app, but the customer
-experience is "AI assistant *in* my SOC app", "AI assistant *in* my
-ITSI app", "AI assistant *for* my MSP customer's tenant" — all
+experience is "governed agents *in* my SOC app", "governed agents *in* my
+ITSI app", "governed agents *for* my MSP customer's Org", all
 served by the same engine without operators having to remember which
 namespace they're in. Splunk's namespace model handles the
-artefact-routing for free; the Org/BU model handles per-tenant
-playbook and tool visibility on top of it.
+artefact-routing for free; the Org/BU model handles per-Org
+agent and tool visibility on top of it.
 
 ## Quick reference — what's admin-only
 
 Listed in the order they appear in the tab bar, so you can read along with the
-screen. **16 tabs in total**; the 13 below are admin-only, and Ask, Settings and
+screen. **16 tabs in total**; the 13 below are admin-only, and Console, Settings and
 Help are shared with end users.
 
 | Tab | Purpose |
 |-----|---------|
-| Playbooks | CRUD on use-case playbooks; promote draft → operational; clone across Org/BU; visibility scoping; **edit each playbook's `includes_skills` list (0.9.6+)**; **see user-authored private playbooks from 0.9.7+** (filter not yet in UI — they appear mixed with system playbooks). 90 ship as seeds. |
-| Skills (0.9.6+) | CRUD on the **Skills layer** — reusable "do-it-correctly" prose blocks that playbooks reference. Sits between Playbooks and Tools. 52 ship as seeds. See [the tools and playbooks overview, §3.5](./tools/tools-and-playbooks.md). |
-| Knowledge | Manage knowledge entries + connectors. Live-platform connectors read the running instance's `searchbnf.conf` (command syntax) and installed visualizations to ground SPL/viz generation (1.4.0). Seven sub-tabs: Connectors, Static rules, Curated entries, Learned Knowledge, Integration State, Integration Runs, Mappings. See the knowledge-layer guide. |
-| Input Sources | The sources a playbook or integration may read from. |
-| Scheduled Ask *(2.x)* | Put a playbook on a timer, via **+ New scheduled ask**. Two kinds: **"Scheduled Job — run a Playbook, deliver a result"** (needs the `scheduled_job` capability, Professional+) and **"Scheduled Integration — read a source, write a target"** (needs the **`ai-integration`** named feature). The integration branch is chosen by the type **or** by the bound Playbook's `integration` tag, so it cannot be booked as a cheaper Job by relabelling. See the Scheduled Ask and memory guide and the AI Driven Integration guide. |
+| Agents | CRUD on agents; promote `draft` → `operational`; clone across Org/BU; visibility scoping; **edit each agent's `includes_skills` list (0.9.6+)**; **see users' own private agents from 0.9.7+** (filter not yet in UI; they appear mixed with the agent templates). 90 agent templates ship as seeds: 65 ready and 25 in preview. |
+| Skills (0.9.6+) | CRUD on the **Skills layer**: reusable "do-it-correctly" prose blocks that agents reference. Sits between agents and tools. 52 ship as seeds. See [the tools and agent templates overview, §3.5](./tools/tools-and-playbooks.md). |
+| Knowledge | Manage knowledge entries + connectors. Live-platform connectors read the running instance's `searchbnf.conf` (command syntax) and installed visualizations to ground SPL/viz generation (1.4.0). Four sub-tabs: Connectors, Static rules, Curated entries, Learned Knowledge. (Integration State, Integration Runs and Mappings moved to Unattended in 2.7.0.) See the knowledge-layer guide. |
+| Unattended *(2.x)* | The home for everything that runs unattended (page heading **Unattended runs**). Five sections: **Integrations**, **Agent jobs**, **Mappings**, **Input sources** (the sources an agent or integration may read from) and **All runs**. **Integrations** lists every integration with its sources, destinations, schedule and last run; opening one shows its flow (source → mapping → destination, drawn from the integration agent's contract and the mapping its run uses), its runs, its watermarks and its schedule, with **Run now** and **Edit schedule**. Two kinds of schedule: a **Scheduled Job** runs an agent and delivers a result (needs the `scheduled_job` capability, Professional+); a **Scheduled Integration** reads a source and writes a target (needs the **`data_integration`** capability, Enterprise and MSP, from 2.7.0). The integration branch is chosen by the type **or** by the bound agent's `integration` tag, so it cannot be booked as a cheaper agent job by relabelling. See the unattended runs and memory guide and the AI Driven Integration guide. |
 | Tokens & Costs | Cost / token analytics, multi-group comparison, over-time charts. Greyed unless licence ≥ Professional. |
-| Orgs & BUs | Multi-tenant CRUD. Cap-enforced by licence. |
-| Tools | Four sub-tabs since 2.5.9: **Built-in tools** (enable/disable, per-tool metadata overrides — **182** of them), **Custom tools** ([the custom-tools guide](./tools/custom-tools-authoring.md)), **MCP servers** (registration, tool import, and per-tool expand + run for debugging), **ServiceNow** ([the ServiceNow guide](./integrations/servicenow.md)). Credentials for MCP and ServiceNow are settable **from the UI** — no backend trip to rotate one. **Full details in [the tool catalogue](./tools/tool-catalogue.md).** |
+| Orgs & BUs | Org and BU CRUD. Cap-enforced by licence. |
+| Tools | Four sub-tabs since 2.5.9: **Built-in tools** (enable/disable, per-tool metadata overrides, for all **196** of them), **Custom tools** ([the custom-tools guide](./tools/custom-tools-authoring.md)), **MCP servers** (registration, tool import, and per-tool expand + run for debugging), **ServiceNow** ([the ServiceNow guide](./integrations/servicenow.md)). Credentials for MCP and ServiceNow are settable **from the UI** — no backend trip to rotate one. **Full details in [the tool catalogue](./tools/tool-catalogue.md).** |
 | Audit (1.3.0+) | Per-Org audit search / timeline / consent + governance log / CSV export. **Greyed unless licence ≥ Enterprise (moved from Professional in 1.4.1).** |
 | License | Activate / validate / remove the Cryptolens licence; manage expiry-warning recipients. |
 | Backups | Browse daily KVStore snapshots, inspect manifest + verification + referenced-credentials inventory per backup, trigger an out-of-schedule backup, and run a 3-step dry-run + acknowledge + commit **restore** (0.9.0+). Greyed unless licence ≥ Professional. |
@@ -136,7 +138,7 @@ caps, Tokens & Costs, audit). **1.4.1 replaces that with a per-feature
 capability matrix.** Each feature declares the **minimum tier** it needs;
 the server resolves the active tier to a full `{capability: bool}` map and
 both refuses gated calls server-side **and** tells the frontend which
-tabs / sections / playbooks to grey out. The split is deliberate:
+tabs / sections / agents to grey out. The split is deliberate:
 
 - **Professional = operations** (the things a working ops team does).
 - **Enterprise = security + integrations + governance + reliability**
@@ -150,27 +152,33 @@ disappear. Source of truth: `CAPABILITY_MIN_TIER` in
 `bin/itmip_llm_license_tier.py`, emitted on
 `GET /services/itmip_llm/license` as `capabilities`.
 
+Licence checks read the licence from Splunk's credential store and reuse that read for up to 30
+seconds in each Splunk process. A licence you add, change or remove applies immediately in the
+request that made the change, and everywhere else within 30 seconds. A licence that cannot be read
+is never reused: the check fails closed to the Personal tier until it can be read again.
+
 ### Which feature needs which tier
 
 | Capability | Min tier | What it covers |
 |---|---|---|
 | `spl_generation`, `dashboard_generation` (Simple XML + Studio), `alert_generation` | **Personal** | Core authoring — every tier, including the free single-user trial. |
 | `byok`, `multi_llm` | **Personal** | Bring-your-own-key and the multi-provider LLM picker — all tiers. |
-| `knowledge_layer`, `skills_layer`, `template_authoring` | **Personal** | Knowledge / Skills / playbook authoring — all tiers. |
+| `knowledge_layer`, `skills_layer`, `template_authoring` | **Personal** | Knowledge, Skills and agent authoring, all tiers. |
 | `ml_generation` | **Professional+** | MLTK `fit` workflows + CDTSM training/model promotion. |
-| `history` | **Professional+** | Persisted Ask history. |
+| `history` | **Professional+** | Persisted history of Console runs. |
 | `tokens_costs` | **Professional+** | Tokens & Costs analytics tab. |
 | ~~`in_splunk_awareness`~~ *(deprecated 1.7.1)* | **All tiers** *(was Professional+)* | TrackMe feed-health + the `_internal` / Cribl ingestion-health **checks** — moved to all tiers in 1.7.1 (bounded only by Splunk role + index ACL). ES / ITSI **read**-context tools are gated by `security_workflows` (Enterprise), not this key. |
 | `backups` | **Professional+** | Backups tab (daily snapshot browse + restore wizard). |
 | `data_onboarding` | **Professional+** | Data Foundation **authoring**: config-package builder, props/transforms validators, Data Quality Score (**Live — shipped 1.5.0**). *(The ingestion-health **check** tools moved to all tiers in 1.7.1 — see `in_splunk_awareness` above.)* |
-| `platform_ops` | **Professional+** | *Reserved — platform-operations playbooks / tools.* |
-| `security_workflows` | **Enterprise+** | ES / ITSI / ATT&CK-hunt playbooks + ES / ITSI / SSE tools. |
+| `platform_ops` | **Professional+** | *Reserved: platform-operations agents and tools.* |
+| `security_workflows` | **Enterprise+** | ES / ITSI / ATT&CK-hunt agents + ES / ITSI / SSE tools. |
 | `mcp_servers` | **Enterprise+** | MCP server registration + tool import + invoke. |
 | `custom_http_tools` | **Enterprise+** | Admin-authored custom HTTP tools. |
 | `iam_gateway_hook` | **Enterprise+** | Customer authorisation hook (server-side dynamic headers). |
 | `audit_logging` | **Enterprise+** | Audit tab + per-Org audit index config **(moved from Professional in 1.4.1)**. |
-| `governance_logging` | **Enterprise+** | Governance change log (playbook/tool/MCP/LLM-config changes). |
-| `reliability_llm_ops`, `ai_activity_dashboard`, `llm_health_dashboard`, `multi_model_orchestration` | **Enterprise+** | *Reserved — LLM reliability/observability roadmap.* |
+| `data_integration` | **Enterprise+** | The integration programme *(2.7.0)*: reconciliation, integration flows, Scheduled Integrations, the approval and stage views for blocked integration writes, and writes to a ServiceNow or stage destination. A pending write can still be **cancelled** without it. |
+| `governance_logging` | **Enterprise+** | Governance change log (agent/tool/MCP/LLM-config changes). |
+| `reliability_llm_ops`, `ai_activity_dashboard`, `llm_health_dashboard`, `multi_model_orchestration` | **Enterprise+** | `ai_activity_dashboard` gates the *Adjutant AI Behaviour Analysis* agent. The other three keys are reserved and gate nothing in 2.7.0. The LLM Health and AI Activity dashboards ship at every tier (admin roles only) and are not gated by these keys (see [the LLM reliability guide](./llms/llm-reliability.md)). |
 | `multi_deployment` | **MSP** | Multiple Orgs across deployments. |
 
 ### Named licensable features — the second gating dimension
@@ -190,22 +198,22 @@ addressable independently.
 
 | Named feature | Min edition | Gates |
 |---|---|---|
-| `socplaybooks` | **Enterprise** | Backend Ask-service SECURITY playbook content (composes with `security_workflows`). |
-| `opsrunbooks` | **Professional** | Operations playbook content. |
-| `servicenow` (+ children `incidents` / `problems` / `events` / `changes` / `csdm`) | **Professional** | The **ServiceNow integration** — all REST tools / knowledge / playbooks + ITSM playbooks. The integration uses the flat parent today; the children are reserved for finer granularity. See [the ServiceNow guide](./integrations/servicenow.md). |
+| `socplaybooks` | **Enterprise** | Security agent content for unattended runs (called the Backend Ask Service in earlier documents); composes with `security_workflows`. The feature keeps its original name. |
+| `opsrunbooks` | **Professional** | Operations agent content. |
+| `servicenow` (+ children `incidents` / `problems` / `events` / `changes` / `csdm`) | **Professional** | The **ServiceNow integration**: all REST tools, knowledge and agents, including the ITSM agents. The integration uses the flat parent today; the children are reserved for finer granularity. See [the ServiceNow guide](./integrations/servicenow.md). |
 | `servicenow-mcp` | **Professional** | The ServiceNow **MCP transport** — a deliberate carve-out reachable at Professional **without** the Enterprise `mcp_servers` capability (a *generic* non-ServiceNow MCP server still requires Enterprise). Enforced by `servicenow_mcp_allowed()`. |
 
 ServiceNow **tools** carry a `min_feature` tag (hidden unless the Org both
 holds the feature **and** has an active connection —
-"visible-only-when-configured"); ServiceNow **playbooks** carry a parallel
+"visible-only-when-configured"); ServiceNow **agents** carry a parallel
 `required_feature` gate (server-enforced, fail-closed). As with tier
 capabilities, downgrade **hides, never deletes**. Full reference:
 the licensing reference, §7.1.
 
 ### What an admin / user actually sees when a feature is gated
 
-The frontend greys the relevant tab / section / playbook tile and shows an
-upsell hint. **A greyed tab or playbook is a licence gate, not a bug.** If a
+The frontend greys the relevant tab / section / agent tile and shows an
+upsell hint. **A greyed tab or agent is a licence gate, not a bug.** If a
 gated call is reached anyway (direct REST, a stale UI), the server returns a
 **403** with a plain message, e.g.:
 
@@ -213,14 +221,13 @@ gated call is reached anyway (direct REST, a stale UI), the server returns a
 - `Custom HTTP tools require an Enterprise license.`
 - `The customer IAM gateway hook requires an Enterprise license.`
 - `Machine-learning workflows require a Professional or higher license.`
-- `Audit logging requires a Professional+ license.` *(the cap itself moved
-  to Enterprise in 1.4.1 — `_apply_audit_fields` refuses to set an audit
-  index without the `audit_logging` capability)*
+- `Audit logging requires an Enterprise license.` *(`_apply_audit_fields`
+  refuses to set an audit index without the `audit_logging` capability)*
 
-Security / ES / ITSI / hunt **playbooks** below Enterprise, and ML
-**playbooks** below Professional, simply do not render in the Ask-tab
-picker (the same `dependent_apps` / capability filter that hides
-app-missing playbooks).
+Security / ES / ITSI / hunt **agents** below Enterprise, and ML
+**agents** below Professional, simply do not render in the agent
+picker in the Console (the same `dependent_apps` / capability filter that hides
+agents whose app is missing).
 
 ### Downgrade behaviour — nothing is deleted
 
@@ -234,119 +241,146 @@ the licensing reference for the full tier / capability reference and
 the rights and roles reference for how this layers on top of
 the admin / non-admin role model.
 
-## Tab: Playbooks
+## Tab: Agents
 
-A playbook is a pre-tuned LLM prompt the app prepends to the user's
-question. The app ships **90 playbooks** out of the box — **65 operational** and 25 draft
-(see step 2 of [the installation guide](./installation.md)).
+An agent is a pre-tuned LLM prompt the app prepends to the user's
+question. The app ships **67 agent templates** ready to use, plus 23 agent templates in preview
+that only administrators see (see step 2 of [the installation guide](./installation.md)).
 
-### Editing a playbook
+### Editing an agent
 
-- Click a tile → click **Edit**.
-- Edit `name`, `short_description`, `prompt_text`, `question_text`,
-  `status` (draft / operational), `org_short` / `bu_short`
-  (visibility scope), `dependent_apps`, `required_roles`,
-  `is_default`, `is_general`.
-- Save. The system fields (`creator`, `updated_by`, `version`) update
-  automatically; the version bump prevents the auto-seed loop from
-  reverting your edit.
-- Playbooks with `version === 1` and `creator/updated_by ===
-  "system"` (i.e. unedited shipped playbooks) auto-refresh from the
-  bundled `SEED_TEMPLATES` array on every page load. Once you edit
-  one, it sticks.
+Click a tile, then **Edit**. The editor is a dialog with five tabs:
+General, Prompt, Visibility, Routing & tools and Agent modes. Under the
+title, one sentence says whether it is an agent template or an agent, and
+what can start it. Only
+**Cancel** or **Save changes** leave it; a click beside it, or Escape,
+does nothing, so edits are never lost by accident.
 
-### Visibility scoping (the four fields under "Visibility — who can see this playbook")
+- **General**: name, status (draft / operational), short description,
+  its concise version, and response style. The two reserved roles
+  (router, base guardrails) are here too.
+- **Prompt**: the skills added before the prompt (in order), the prompt
+  itself, and the question form put into the question box.
+- **Visibility**: who can see and use it (see below).
+- **Agent modes**: the ways the agent may be put to work. Each mode is a
+  switch: **Triggered** (an alert, notable or episode calls it),
+  **Scheduled**, **Integration** (its mapping and integration settings
+  open inside this card) and **Published to MCP**. Each card says what the
+  mode needs (for example unattended runs on, or a licence) and which
+  alerts or schedules use the agent. With a mode off, a run that names the
+  agent through that path is refused and recorded. With no mode on it stays
+  an agent template, which people can still pick in the Console. The base
+  guardrails are not an agent and have no modes.
+- **Routing & tools**: how the agent is found, its skills, the tools
+  the model may use, and the agents it may hand over to.
+  - Every list shows what is **selected** first, with a count.
+  - **+ Add** opens a searchable list of what is available, with each
+    value's description and how often it is used.
+  - Only tags and categories accept a new value you type.
+  - Skills are numbered and can be reordered; the order is the order in
+    the prompt.
+  - The tools section starts with one line saying what the model gets.
+    For example "Allowed: 12 of 196 tools", or "All tools (no
+    restriction)" when nothing is chosen. Under it the tools are
+    grouped by product. A tool is allowed when you tick it, or when it
+    has a tag or category you listed. A tool under **Never offer these
+    tools** is never offered, whatever allows it.
+- Save. The system fields (creator, updated by, version) update
+  automatically; the version bump keeps the seed refresh from reverting
+  your edit.
+- Agent templates with `version === 1` and creator `system` (unedited
+  agent templates) refresh from the bundled seeds. Once you edit one, it sticks.
 
-| Field | Effect |
+### Visibility: who can see and use an agent
+
+The tab starts with one sentence, for example *"Shared with Org ACME,
+all Business Units. Users need the role soc_analyst."*
+
+| Setting | Effect |
 |-------|--------|
-| `org_short` | Playbook visible only inside this Org. Use `DFLT` for the universal shared scope. |
-| `bu_short` | Playbook visible only inside this BU. Combine with `org_short`. |
-| `dependent_apps` | List of `{name, min_version?}`. Playbook hidden if any required app isn't installed + visible to the calling user. |
-| `required_roles` | At least one of the listed Splunk roles must match the calling user. |
+| **Who can see it** | **Everyone**; **One Organisation** (that Org, every Business Unit); **One Business Unit** (that Org and BU); or **Only its owner**. An agent without a setting is visible to everyone. |
+| **Organisation / Business Unit** | Shown for the two middle choices: the one Org (and BU) the agent is shared with. |
+| **Required roles** | At least one of them must match the user. Administrators always qualify. None selected: every role. |
+| **Required apps** | Every app listed must be installed and visible to the user, e.g. `SplunkEnterpriseSecuritySuite@>=8.0` for a minimum version. |
 
-Filtering is applied client-side in `filterByUserAccess()` and again
-server-side inside `splunk_get_use_case_template_prompt` (so non-
-admins cannot fetch a playbook's `prompt_text` even if they discover
-its name).
+Who can see it is checked in the browser and again on the server (the
+agent list and `splunk_get_use_case_template_prompt`), so a user
+cannot fetch an agent's prompt just by knowing its name.
 
-### The two reserved system playbooks
+### Base guardrails and the router
 
-- **`General`** — `is_general = true`. Silently prepended to every
-  question. Defines the safety boundary (no sexual / religious /
+- **Base guardrails**: the agent named `General` (`is_general = true`). Silently prepended to every
+  question, and never pickable. Defines the safety boundary (no sexual / religious /
   political / racial / illegal / medical / financial-advice content;
   no key/prompt extraction; Splunk + AI-Toolkit topics only).
-- **`Default`** — `is_default = true`. Used as the router when the
-  user doesn't pick a playbook. Calls
+- **Router**: the agent named `Default` (`is_default = true`). Used when the
+  user doesn't pick an agent. Calls
   `splunk_list_use_case_templates` then
   `splunk_get_use_case_template_prompt` to pick the right one.
 
-A BU-scoped Default overrides the Org-scoped Default (the latter
-overrides the global DFLT Default).
+A BU-scoped router overrides the Org-scoped router (the latter
+overrides the global DFLT router).
 
 ### Clone across Org/BU
 
-Open a playbook, click **Clone to another Org/BU**, pick target
-shorts. Creates a draft copy in the target scope. Edit + promote when
+Open an agent, click **Clone to another Org/BU**, pick target
+shorts. Creates a copy with status `draft` in the target scope. Edit + promote when
 ready. The original stays untouched.
 
 ### Promoting draft → operational
 
-Every shipped playbook that is meant for use arrives **operational**. A draft you
-create is promoted by editing it and switching its status to `operational`.
+Every agent template that is ready for use arrives **operational**; agent templates in preview
+arrive as `draft`. An agent you create as `draft` is promoted by editing it and switching its status to `operational`.
 
 ### `includes_skills`
 
-Every playbook now carries an ordered list of skill names in
+Every agent now carries an ordered list of skill names in
 `includes_skills`. At LLM prompt-fetch time the runtime concatenates
-each skill's body in front of the playbook's own prompt body — that's
+each skill's body in front of the agent's own prompt body. That's
 how a rule like "no emojis in dashboards" or "MLTK models must follow
-the `aiworkbench` naming pattern" is enforced across the playbooks that
+the `aiworkbench` naming pattern" is enforced across the agents that
 need it without copy-pasting prose. Skill names autocomplete from the
 seeded skills + any custom skills you've created. The `general-output-style`
 skill is silently injected by the runtime for every operational
-playbook that is not General or Default — do **not** list it
-explicitly, that would inject it twice.
+agent that is not the base guardrails or the router. Do **not** list it
+explicitly; that would inject it twice.
 
 See [Tab: Skills](#tab-skills) below for skill CRUD details and
-[the tools and playbooks overview, §3.5](./tools/tools-and-playbooks.md)
-for the full 24-skill default catalogue plus the architecture diagram.
+[the tools and agent templates overview, §3.5](./tools/tools-and-playbooks.md)
+for the full 53-skill default catalogue plus the architecture diagram.
 
 ## Tab: Skills
 
-Skills are reusable "do-it-correctly" prose blocks that playbooks
+Skills are reusable "do-it-correctly" prose blocks that agents
 inject into the LLM prompt at fetch time. They factor cross-cutting
-rules out of individual playbooks so each rule lives in exactly one
+rules out of individual agents so each rule lives in exactly one
 place.
 
 **What admins do here:**
 
-- **List** every skill — title, tags, dependent_apps, status,
-  "used by N playbooks" column (count of playbooks whose
-  `includes_skills` references this skill). Hover over the column
-  to see the playbook names.
-- **View** any skill's body in a read-only modal.
-- **Edit** the title, body, tags, categories, applies_when,
-  `dependent_apps`, `dependent_tools`, status, tenant scope. The
-  skill **name is immutable** once a skill exists — playbooks
-  reference it by name and renaming would break the reference.
-- **Create** a new skill — body cap 4000 characters; rejected
-  server-side past that.
-- **Soft-delete** (set `status=deleted`) — playbooks that still
-  reference the deleted skill surface a one-line "skill X dropped:
-  status=deleted" note in their assembled prompt. The LLM sees the
-  note and can adjust narrative rather than pretending the dropped
-  rule ran.
-- **Hard-delete** — only allowed on already soft-deleted rows;
-  drops the KVStore row entirely.
+- **List** every skill: its title and name, status (ready, in preview or deleted), tags,
+  categories, **Depending apps**, and **Used by** (how many agent templates include it; hover for
+  their names). Search by name, title, tag or category.
+- **View** a skill: its text and details as plain text. Close it with the **×** or **Close**.
+- **Edit** or **+ New skill**: a dialog that closes only through **Cancel** or **Save**, and
+  **Save** says what still needs fixing. Tags and categories are lists you add to from the
+  values the skills already use (or a new one); **Depending apps** and **Depending tools** are
+  picked the same way; **Organisation** limits the skill to one Organisation or Business Unit,
+  or leave it empty for everyone. The skill's **name cannot change** once it exists: agents name
+  the skill by it. The text is limited to 4000 characters. Saving keeps everything the dialog
+  does not show, such as who owns the skill.
+- **Delete** keeps the skill, marked deleted: agents that include it say in their instructions
+  that it is missing, so the model does not pretend the rule ran. **Show deleted** lists it again
+  with **Restore** and **Delete permanently**. Both deletes ask in the page first.
 
-**Lifecycle**: identical to playbooks. The 24 default skills are
+**Lifecycle**: identical to agents. The default skills are
 seeded on first load with `creator=system`, `updated_by=system`,
 `version=1`. Once you edit one, `version > 1` and the auto-refresh
 on the next app upgrade leaves your edit alone. To revert to the
-shipped default, soft-delete + hard-delete the row and let the
-seeder recreate it.
+shipped default, **Delete** it, then **Delete permanently**, and the
+seeder recreates it.
 
-**Tenant scope**: same as playbooks. `DFLT / DFLT` skills are
+**Org/BU scope**: same as agents. `DFLT / DFLT` skills are
 visible to every caller. Narrower scopes are visible to matching
 callers + admins. See
 the rights and roles reference, §7.4b.
@@ -358,21 +392,21 @@ the rights and roles reference, §7.4b.
   and disappears from prompts in environments where TrackMe is not
   installed. The dropped-note tells the LLM why.
 - `dependent_tools` — skill is silently dropped when a named tool is
-  disabled for the resolved tenant. Used for skills that materially
+  disabled for the resolved Org/BU. Used for skills that materially
   depend on a specific tool being callable.
 
 > **Anti-pattern**: do not write rules into skill bodies that should
-> live in playbook prompts. Skills are for *cross-cutting* rules —
-> things three or more playbooks would otherwise repeat. A rule only
-> one playbook uses belongs in that playbook's `prompt_text`, not in
+> live in agent prompts. Skills are for *cross-cutting* rules:
+> things three or more agents would otherwise repeat. A rule only
+> one agent uses belongs in that agent's `prompt_text`, not in
 > a skill.
 
 ## Authoring & promotion model
 
-End users can now author their own private playbooks via a
-conversational Ask-tab flow (no YAML / JSON editing). The
+End users can now author their own private agents via a
+conversational Console flow (no YAML / JSON editing). The
 companion sharing-and-promotion model adds a four-step ladder
-on every playbook + skill — `private | bu | org | global` —
+on every agent and skill (`private | bu | org | global`),
 with admin-gated promotion.
 
 ### The sharing ladder
@@ -393,28 +427,34 @@ Promote = move up. Demote = move down. Each step requires authority
 on the **target** scope. End users author into `private` only; the
 server forces `sharing=private` + `owner_user=<caller>` on every
 write through `splunk_create_user_template`. Admins promote
-privately-authored playbooks up the ladder via the Playbooks tab.
+privately-authored agents up the ladder via the Agents tab.
 
-### End-user authoring flow (Ask tab)
+The server applies the ladder when it lists agents and skills: a
+user receives only the rows their own Org, BU and user name allow,
+worked out on the server from their roles. Administrators (`admin`,
+`sc_admin`, `splunk_admin`) receive every row; the Console still shows
+them only their own Org's. The agent and skill collections
+themselves can be read directly (over the KV Store REST API or in a
+search) by administrators only.
 
-Two new system playbooks ship out-of-the-box, both with
-`sharing=global`, `creator=system`:
+### End-user authoring flow (Console)
 
-- **Create user playbook** — the end user describes a use case in
-  plain English; the LLM composes a playbook and calls
+Two system agent templates ship out-of-the-box, both with
+`sharing=global`, `creator=system`. They keep their original names:
+
+- **Create your own agent**: the end user describes a use case in
+  plain English; the LLM composes an agent and calls
   `splunk_create_user_template`.
-- **Update user playbook** — the end user names one of their own
-  private playbooks and a paragraph of what should change; the LLM
+- **Update your own agent**: the end user names one of their own
+  private agents and a paragraph of what should change; the LLM
   composes a patch and calls `splunk_update_user_template`.
 
 Both go through a Python REST handler that enforces:
 
-1. **Policy** (`end_users_may_author_templates` — defaults to
-   `true`; the `itmip_authoring_policies` collection that lets you
-   disable it per Org / BU is **deferred to a follow-up**, so this
-   knob is effectively always-on in 0.9.7).
-2. **Quota** — 25 private playbooks per user. Hard-coded default;
-   per-Org override will land with the policy collection.
+1. **No policy switch.** There is no setting that turns end-user
+   authoring off per Org or BU in 2.7.0.
+2. **Quota**: 25 private agents per user. The number is fixed and
+   cannot be changed per Org.
 3. **Name uniqueness** — within `(owner_user)`, the handler appends
    `_v2` / `_v3` on collision rather than failing.
 4. **Field shapes** — `name` matches `[a-z][a-z0-9_]*`,
@@ -453,13 +493,13 @@ Fields:
 
 | Field | Meaning |
 |---|---|
-| `action` | `create` / `update` (promote / demote / delete land with the admin-endpoints follow-up) |
-| `object_name` | the playbook's name |
+| `action` | `create` / `update` (the only two actions recorded) |
+| `object_name` | the agent's name |
 | `object_key` | the KVStore `_key` (empty on validation-rejected rows that never persisted) |
 | `owner_user` | always the caller for create + update on private rows |
 | `by_user` | the actor (same as owner_user for end-user flows) |
 | `tenant_org` / `tenant_bu` | resolved at action time |
-| `authoring_mode` | `llm_mediated` for the new flow; `direct` is reserved for admin direct-edit when those endpoints land |
+| `authoring_mode` | `llm_mediated`, the only value written in 2.7.0 |
 | `attempted_override_fields` | JSON-encoded list of server-forced field names the LLM tried to set, plus `forbidden_content_in_<field>:...` markers for prose-level injection attempts |
 | `errors` | JSON-encoded list of validation-failure messages, when applicable |
 
@@ -469,24 +509,19 @@ content into the question_text inputs OR being targeted by the
 content they're querying. Either way it's worth a follow-up
 conversation.
 
-### What's deferred to a follow-up release
+### Widening a user-authored agent's scope
 
-The MVP slice ships the **end-user authoring** path end-to-end.
-The matching admin surface — promote / demote menus, scope filter
-on the Playbooks tab, an Authoring policies settings page — is
-deferred. Today, admins who want to promote a user-authored private
-playbook to a wider scope can edit the row directly via the
-Playbooks tab's existing Edit modal:
+There is no promote or demote action, scope filter or authoring
+policy page for user-authored agents. An admin who wants to make a
+user-authored private agent available more widely edits the row
+directly in the Agents tab's Edit modal:
 
-1. Open the user-authored playbook in the Edit modal.
+1. Open the user-authored agent in the Edit modal.
 2. Change `org_short` / `bu_short` to the desired scope (the
    `sharing` field will follow at read time via the dual-read
-   mapper — see [the tools and playbooks overview, §2](./tools/tools-and-playbooks.md#2-tenancy-model--org--bu-scoping)).
+   mapper; see [the tools and agent templates overview, §2](./tools/tools-and-playbooks.md#2-tenancy-model--org--bu-scoping)).
 3. Save. The row's `sharing` field is now derived to match the new
-   tenant scope.
-
-This is a clumsy workaround for one release. Proper admin promote /
-demote endpoints, with a full authority matrix, land in 0.9.8.
+   Org/BU scope.
 
 ## Tab: Tokens & Costs
 
@@ -515,11 +550,11 @@ written to the index).
   [the installation guide](./installation.md).
 - Events are written by the `/services/itmip_llm/usage_log`
   persistent handler (called by the React app at the end of every
-  Ask turn). Rate-limited to **120 writes/min/user** to prevent
+  Console turn). Rate-limited to **120 writes/min/user** to prevent
   charts being skewed by spam.
-- Cost is computed at write time using the per-model pricing in
-  `src/services/llm/providers.ts`. Updating the pricing in the
-  bundle won't retro-update historical events; you'll see a step in
+- Cost is computed at write time from the per-model pricing in
+  effect at that moment. A later pricing change won't retro-update
+  historical events; you'll see a step in
   the cost chart at the deploy point.
 
 ### Known gaps
@@ -534,7 +569,7 @@ written to the index).
 
 ## Tab: Orgs & BUs
 
-Multi-tenant Org / BU CRUD with **licence-aware caps**. The banner
+Org / BU CRUD with **licence-aware caps**. The banner
 at the top of the page shows your current limits:
 
 | Tier | Orgs | BUs / Org |
@@ -604,7 +639,7 @@ after an explicit warning*, not an app fault.
 > hidden and the Audit tab does not appear; server-enforced in
 > `itmip_llm_tenancy._apply_audit_fields`, which refuses to set an audit
 > index without the `audit_logging` capability and returns
-> `Audit logging requires a Professional+ license.` on a direct call. See
+> `Audit logging requires an Enterprise license.` on a direct call. See
 > [Per-feature licensing (v1.4.1)](#per-feature-licensing) above.
 
 **What you, the admin, must do (because the app never creates indexes):**
@@ -636,7 +671,7 @@ after an explicit warning*, not an app fault.
    browser_direct but those turns are lower-assurance.
 
 **Reading the audit:** the **Audit** tab — search by user / time / LLM /
-playbook / wildcard over prompt+answer, with timeline, frequency, consent
+agent / wildcard over prompt+answer, with timeline, frequency, consent
 log, governance log, and CSV export for legal hand-off.
 
 **Honest limits to remember:** an internal `_` index is hidden from ordinary
@@ -645,22 +680,22 @@ gaps, not a privileged-admin rewrite; only an off-box WORM/SIEM copy hardens
 against that (optional, not built in). You are the data controller — set
 retention, lawful basis and privacy notice per your DPIA.
 
-## Backend Ask Service — agent_runner enablement
+## Unattended runs: enabling the agent runner
 
-> Full operator reference: the Backend Ask Service guide.
+> Full operator reference: the unattended runs guide.
 
-The **Backend Ask Service** lets you attach an operator-authored *playbook*
+**Unattended runs** let you attach an operator-authored *agent*
 to a native Splunk alert, an ES correlation search (notable), or an ITSI
-episode policy — or fire it via REST — so the trigger launches an
+episode policy, or fire it via REST, so the trigger launches an
 **unattended AI investigation** with no human in the loop. Each run executes
-server-side in a bounded Python agent that gathers evidence, reaches a
+server-side in the agent runner, a bounded Python process that gathers evidence, reaches a
 validated structured verdict (the Investigation Result Contract), writes
 back safely to the source object, and records the run in history + audit +
 telemetry.
 
 > **Ships DISABLED.** The engine is built and live-verified but the master
 > switch is **`[agent_runner] enabled = 0`** out of the box. Nothing runs
-> unattended until you deliberately enable it. The security playbook content
+> unattended until you deliberately enable it. The security agent content
 > additionally rides the **`socplaybooks` named feature (Enterprise)** and
 > operations content the **`opsrunbooks` feature (Professional)** — see
 > [Named licensable features](#named-licensable-features--the-second-gating-dimension)
@@ -718,13 +753,26 @@ Runaway hard ceilings (`runner_max_llm_calls` / `runner_max_tool_calls`,
 (`dispatcher_lease_ttl_seconds`), resilience (`dedup_mode`, `storm_detection` /
 `storm_threshold`), and tenancy (`per_org_history`, `queue_mode`) are all
 documented in the spec file and in
-the Backend Ask Service guide, §8.
+the unattended runs guide, §8.
 
 > **Why these knobs and not `limits.conf`:** Splunk's `limits.conf` governs *searches*.
 > An Adjutant AI run is a separate `splunk cmd python3` subprocess that no `limits.conf`
 > stanza constrains, so the app governs it directly — `max_parallel` caps how many exist,
 > and the runner caps its own memory/CPU/priority at startup. See
-> the Backend Ask Service guide, §5.1.
+> the unattended runs guide, §5.1.
+
+**When a cap cannot be applied.** Some operating systems refuse a runner's memory or CPU cap: macOS
+refuses the memory cap, and Windows supports neither. The run still goes ahead, and the refusal is
+recorded on the run's queue row as `resource_limits_not_applied` and in the runner log, so a run
+that was not bounded as configured is visible rather than silent.
+
+### Where unattended runs log
+
+Scheduled and unattended runs log to `$SPLUNK_HOME/var/log/splunk/itmip_llm_agent_runner.log`, one
+line per message, each with its run id. Splunk indexes the file into `_internal`, so a run's lines
+are found with `index=_internal source=*itmip_llm_agent_runner.log* run_id=<run id>`. A runner that
+fails before it starts logging writes to `itmip_llm_agent_runner_boot.log`. Both files are rotated by
+size. The run's Splunk session key is never written to either file.
 
 ### Monitoring — two dashboards
 
@@ -732,7 +780,7 @@ Two app-nav dashboards are the daily drivers (they run in the app context
 where the agent history lookup resolves):
 
 - **Adjutant AI — Automation Outcomes** (`adjutant_ai_outcomes`) — *are the
-  verdicts good?* Verdict distribution, runs-by-playbook, terminal-state mix,
+  verdicts good?* Verdict distribution, **Runs by agent (last 30d)**, terminal-state mix,
   write-back outcomes, latency p50/p95, token cost, and the deferred/failed
   "needs attention" table. The analyst-agreement headline (with coverage
   beside it) activates with feedback capture.
@@ -744,32 +792,39 @@ where the agent history lookup resolves):
   emailed a concrete recommendation when a knob nears its limit.
 
 Pipeline telemetry is also queryable directly:
-`index=itmip_ai_telemetry sourcetype=itmip:agent:telemetry`. See
-the Backend Ask Service guide, §9–10 for the symptom →
+`index=itmip_ai_telemetry sourcetype=itmip:agent:telemetry`. Unattended runs write one
+`event=agent_run` per run. Interactive questions write one `event=tool_step` per step of the
+Tool calls panel when the question is saved to History, built from the same step record the
+panel shows: ids, tool, kind, status, timings and parts, counts, sampling, attention ids,
+effect, authorization outcome, retries and, for a model round, tokens and an estimated cost.
+It never carries the tool's arguments, the SPL, the step's text or any output. See
+the unattended runs guide, §9 and §10 for the symptom →
 knob-to-tune table.
 
-### Triggering playbooks — event, scheduled, REST, and MCP
+### Triggering agents: event, scheduled, REST, and MCP
 
-A playbook (an operational use-case playbook) can be run unattended four ways — all go
+An agent with status `operational` can be run unattended four ways. All go
 through the **same** bounded, default-deny queue, so none gets more privilege than
 an alert-triggered run. The engine must be **enabled** (`[agent_runner] enabled = 1`).
 
-- **Event-triggered (entity-scoped).** Attach the **Adjutant AI: Run Investigation
-  Playbook** alert action to any saved search / ES correlation search (Adaptive
+- **Event-triggered (entity-scoped).** Attach the **Adjutant AI: Run investigation
+  agent** alert action to any saved search / ES correlation search (Adaptive
   Response) / ITSI episode action. The triggering search's first result row (e.g.
   `host`, `user`) is captured as the run's *source_context*, so an **MLTK-outlier
-  alert investigates that host**. Set the playbook name + (optionally) the bound
-  fields + `allowed_actions` in the action's parameter form.
+  alert investigates that host**. Set the agent's name in the **Agent** field (an agent whose Triggered agent mode is on) and (optionally) the bound
+  fields and the permitted actions (`allowed_actions`) in the action's parameter form.
 - **Scheduled (the morning health check).** A `cron_schedule` saved search whose
   result fires the alert action. Two **disabled** OOTB examples ship in
-  `default/savedsearches.conf` (*Daily 08:00 health-check playbook*, *MLTK outlier →
-  Investigation*): set `.param.playbook` to a real playbook, adjust the search, then
+  `default/savedsearches.conf` (`Adjutant AI - EXAMPLE - Daily 08:00 health-check playbook` and
+  `Adjutant AI - EXAMPLE - MLTK outlier triggers an Investigation playbook`; the searches and the
+  `.param.playbook` parameter keep their original names): set `.param.playbook` to a real agent, adjust the search, then
   `disabled = 0` + `enableSched = 1`.
 - **REST.** `POST /services/itmip_llm/agent/run` (admin) — for an external scheduler.
-- **MCP (interoperability hub, 1.7.x).** Other AI agents can drive your playbooks over MCP
-  through four async fire-and-poll tools — `adjutantai_list_playbooks(org_bu)`,
-  `adjutantai_start_playbook(org_bu, playbook_name)`, `adjutantai_get_playbook_status(org_bu, run_id)`
-  and `adjutantai_get_playbook_results(org_bu, run_id)`. **OFF by default (1.7.1)** — set
+- **MCP (interoperability hub, 1.7.x).** Other AI agents can run your agents over MCP
+  through four async fire-and-poll tools (renamed in 2.7.0 from `adjutantai_*_playbook*`; reconfigure
+  any MCP client that used the old names): `adjutantai_list_agents(org_bu)`,
+  `adjutantai_start_agent(org_bu, playbook_name)`, `adjutantai_get_agent_status(org_bu, run_id)`
+  and `adjutantai_get_agent_results(org_bu, run_id)`. **OFF by default (1.7.1)** — set
   `[mcp_server] enabled = 1` in `itmip_ai_workbench.conf` and restart to turn it on. Two
   ways to reach the tools once enabled:
   - **Standalone Adjutant MCP server** — `POST /services/itmip_llm/mcp_server` (JSON-RPC
@@ -779,11 +834,62 @@ an alert-triggered run. The engine must be **enabled** (`[agent_runner] enabled 
     `splunk_get_info`. **Requires Splunk_MCP_Server 1.2+** (argument substitution); on 1.1.x
     the app holds back (logs to `sourcetype=itmip_llm_mcp_register`) and you use the
     standalone endpoint instead.
-  **To expose a playbook, tag it `MCPready`** (Playbooks tab → edit → Tags) — only
-  `MCPready` + Org/BU-visible playbooks are listable/runnable. Every call names the
-  **Org/BU** (e.g. `TDDD/SFIT`) as a safeguard (non-admin → own tenant only). Running is
-  **admin-only (v1)** and requires the Backend Ask Service enabled. Full setup + auth:
+  **To publish an agent to MCP, switch on its Published to MCP agent mode** (**Agents** tab → **Edit** →
+  **Agent modes**). Only agents with that mode on and visible to the Org/BU are listable and runnable. Every call names the
+  **Org/BU** (e.g. `ACME/OPS`) as a safeguard (non-admin → own Org only). Running is
+  **admin-only (v1)** and requires unattended runs to be enabled. Full setup + auth:
   **[the MCP server guide](./tools/mcp-server.md)**.
+
+### Agent modes decide which agents may run unattended
+
+From 2.7.0 each way of running an agent unattended needs the matching **agent mode** switched on
+(**Agents** tab → **Edit** → **Agent modes**). An agent template with no mode on runs only when
+someone picks it in the Console.
+
+| How the run starts | Agent mode it needs |
+|---|---|
+| An alert, an ES notable or an ITSI episode action (including **Root-cause this episode**) | **Triggered** |
+| A Scheduled Job | **Scheduled** |
+| A Scheduled Integration | **Integration** |
+| An MCP client | **Published to MCP** |
+| An administrator's REST call, or a mapping verification run | none |
+
+**A run whose mode is off is refused**, before the language model is called, so it costs no tokens.
+It is never silent: the run is recorded as failed with the state `mode_refused` and the reason
+*"the <mode> agent mode is off for this agent template"*, in the run history, in the audit trail
+and in the platform audit log (`agent_run_refused`). A run that names an agent that does not exist
+is refused the same way, with the reason *"agent template <name> not found"*.
+
+**While unattended runs are off** (`[agent_runner] enabled = 0`), an alert or schedule that fires is
+recorded as a refused run with the state `engine_disabled`: one record per alert or schedule per
+hour, and a platform audit line every time it fires. An Adjutant AI alert or scheduled action that
+names no agent is recorded the same way, with the state `no_template_configured`.
+
+#### Upgrading to 2.7.0: agents already in use keep running
+
+Before 2.7.0 the modes were not checked. So that nothing that worked stops, a one-time step switches
+on the matching mode for every agent that is already in use. It runs on the first dispatcher tick
+after unattended runs are enabled, before any run is started. An agent counts as in use when one
+of these names it:
+- an Adjutant AI alert or scheduled action on a saved search, enabled or not;
+- the default agent of an Adjutant AI alert action;
+- a storm fallback;
+- a run in the last 30 days.
+
+The step only switches modes on, never off, and runs once. If you switch a mode off later, it stays
+off. Each change is in the platform audit log:
+
+```
+index=_internal source=*itmip_llm_audit.log* agent_mode_upgrade*
+```
+
+| Line | Meaning |
+|---|---|
+| `agent_mode_upgrade` | Modes switched on for one agent, with how many places name it. |
+| `agent_mode_upgrade_conflict` | Nothing was changed for this agent: it is used both by a Scheduled Job and by a Scheduled Integration. Switching on one mode would change what the other runs as. Decide which it is and switch that mode on. |
+| `agent_mode_upgrade_unresolved` | Something names an agent that does not exist. Its runs are refused as *not found*. |
+| `agent_mode_upgrade_done` | The step finished; the counts are in the line. |
+| `agent_mode_upgrade_deferred` | The step could not read what it needs, or could not save a change. No run is started until it succeeds; it tries again on the next tick. Queued runs wait. |
 
 ## Data Foundation
 
@@ -798,7 +904,7 @@ admin-relevant capabilities, gated by the **`data_onboarding`** capability
 - **Data Quality Score** — a scored read of how well a source conforms
   (CIM / field extraction / timestamping), so onboarding gaps are visible.
 
-These appear as playbooks / tools in the Ask flow when the `data_onboarding`
+These appear as agents / tools in the Console when the `data_onboarding`
 capability is unlocked; below Professional they do not render.
 
 ## Tab: Tools
@@ -808,10 +914,18 @@ in Splunk tools (search, dashboards, ES / ITSI / TrackMe, MLTK), admin-
 authored HTTP custom tools (since 0.4.0), and MCP server integrations
 (since 0.7.0). It also lets you enable/disable tools per Org/BU,
 override per-tool metadata (tags / category / short description), and
-configure tenant-scoped credentials.
+configure Org/BU-scoped credentials.
 
 This is enough surface to warrant its own document — see
 **[the tool catalogue](./tools/tool-catalogue.md)** for the full reference. Quick highlights:
+
+- **The edit dialogs** (**Manage** on a built-in tool, a custom tool's editor and **Import JSON**, and an MCP
+  server's editor) work like the LLM configuration Edit dialog. They are left only through **Cancel** or the
+  save button: a click beside the dialog or Escape does nothing, so an edit is never lost by accident. Fields are
+  grouped on tabs. A tab you changed says **changed**, a tab with a problem says **has errors**, and the save
+  button stays disabled until something changed and every tab is valid, naming the tabs to fix. **Manage** has a
+  **Metadata** and an **Availability** tab; **Reset to built-in defaults** puts the built-in metadata back in the
+  dialog and **Save changes** applies it.
 
 - **Built-in tools** are scoped per Org/BU via `Manage` rules
   (`Org+BU` > `Org+*` > `*+BU` > `*+*` > implicit-enabled).
@@ -842,8 +956,8 @@ This is enough surface to warrant its own document — see
   pick the **transport** (direct REST or a ServiceNow MCP server), the
   instance URL / MCP server, the credential (`storage/passwords`, with the
   customer-auth hook for WebEAM-gated instances), the CSDM version, the CMDB
-  **write allowlist** (default deny-all), the closed-incident policy, and —
-  for a SecOps Org — `sir_enabled` + (explicitly) the security playbooks.
+  **write allowlist** (default deny-all), the closed-incident policy, and,
+  for a SecOps Org, `sir_enabled` plus (explicitly) the security agents.
   **Test connection** validates auth + detects the release. All connectivity
   is server-side; credentials never reach the browser; ServiceNow can never
   block the assistant. Gated **Professional + `servicenow`** (MCP rides the
@@ -861,8 +975,8 @@ This is enough surface to warrant its own document — see
 - **Simple XML dashboard builder tools** (1.4.0) — a `dashboards-simplexml`
   tool category of seven route-unlocked tools (`splunk_xml_create`,
   `splunk_xml_add_input`, `splunk_xml_add_panel`, `splunk_xml_update_panel`,
-  `splunk_xml_remove_panel`, `splunk_xml_preview`, `splunk_xml_publish`,
-  backed by `src/services/xmlBuilder.ts`). This is now the default path for
+  `splunk_xml_remove_panel`, `splunk_xml_preview`, `splunk_xml_publish`).
+  This is now the default path for
   multi-panel dashboards: the LLM composes the dashboard via small typed
   calls rather than emitting one large XML blob, so big dashboards no longer
   truncate or mis-escape, and each panel can set its own `full_width` / `row`
@@ -960,18 +1074,16 @@ sending"** checkbox. When on (the default for every new config),
 users see a full-screen modal warning them that data is about to
 leave the organisation:
 
-- on the **first Ask** with that LLM in a browser session, AND
+- on the **first run** with that LLM in a browser session, AND
 - every time the user **switches to** that LLM (so an admin's
   internal-LLM-then-external-LLM pivot can't slip past unnoticed).
 
 Acknowledgement is per-LLM, per-session — a full page reload
-re-prompts; the Ask tab's Clear button does **not** reset it.
+re-prompts; the Console's Clear button does **not** reset it.
 
 The default warning is a Splunk-Enterprise-specific message that
 lists every data class that may leave (question text, SPL, search
-results, dashboard XML, alert config, Splunk metadata). The default
-is in `src/services/llm/providers.ts` →
-`DEFAULT_CONFIRM_EXTERNAL_MESSAGE` if you want to read or fork it.
+results, dashboard XML, alert config, Splunk metadata).
 
 You can override the message per LLM in the **Custom warning message
 (optional)** field shown when the checkbox is on. Three placeholders
@@ -994,7 +1106,7 @@ since browsers can't run server-side Python. When the hook is enabled,
 every outbound request runs through
 `bin/customer_authorisation.py` (or your override at
 `local/bin/customer_authorisation.py`) and merges the returned
-headers in. Use this for endpoints behind WebEAM.Next, Ping, Okta,
+headers in. Use this for endpoints behind WebEAM, Ping, Okta,
 AzureAD, internal SAML — anywhere static headers aren't enough
 because tokens expire and have to be re-minted.
 
@@ -1018,7 +1130,7 @@ When you add a new LLM config:
 | Server-side proxy | When call mode = `splunk_proxy`, optional `http://host:port` for an outbound HTTP proxy on the SH. |
 | Extra role patterns | Comma-separated list. Roles outside the Org's role_patterns that should also see this LLM. |
 | Extra user names | Comma-separated. Specific Splunk users to allow. |
-| Default model | Per-config default the Ask tab uses unless the user picks another. |
+| Default model | Per-config default the Console uses unless the user picks another. |
 
 After save, the modal asks for the **secret value** (API key, access
 token, Bedrock access key id). It's stored in `storage/passwords`
@@ -1029,18 +1141,75 @@ See the supported-LLM matrix for the per-provider
 field mapping (endpoint shape, auth header name, CORS reality,
 streaming support, recommended models).
 
+## Tab: Models (prices and registered models)
+
+The Models tab lists every model Adjutant knows, with its price and where the price came from. The
+prices drive the estimates on Tokens & Costs. Any administrator sees the catalogue and the discovery
+history; setting prices and registering models needs Enterprise (`model_catalog_overrides`).
+
+All prices are **US dollars per 1 million tokens**. The **input price** is what is sent to the model:
+the request, the instructions and the tool results. The **output price** is the text the model
+writes. Both dialogs show a worked example as you type, for example "A round with 70,000 input and
+300 output tokens costs about $0.215."
+
+### Set price
+
+**Set price** on a catalogue row opens the dialog with that model filled in; **+ Set price** under
+*Price overrides* opens it empty. The dialog closes only through **Cancel** or **Add override**
+(**Save override** when you edit one). Its fields:
+
+| Field | What to give |
+|---|---|
+| Provider | The provider the price applies to. |
+| Model id | Exactly as the provider reports it. Prices this one model or deployment. |
+| Underlying model | The provider's model name behind deployments (for example on Azure). Prices every deployment of it. Give this, the model id, or both. |
+| Input price / Output price | Both are required, 0 or more. |
+| Reason | Kept in the audit trail, for example where the price comes from. |
+
+An override outranks every other price source, and discovery never replaces it. **Edit** and
+**Delete** are on each row of *Price overrides*; Delete asks first.
+
+An override saved before 2.7.0 without prices is stored as 0 / 0 and makes every run on that model
+count as free. The list shows it as **0 / 0 (free)** with a note; edit it and give both prices.
+
+### Register model
+
+**+ Register model** under *Registered models* adds a model that discovery cannot see, such as a
+private gateway or a self-hosted deployment. Discovery and shipped packs never overwrite it. The
+dialog closes only through **Cancel** or **Register**. Give the provider and the model id, a display
+name if you want one, and either both prices or neither (the model is then listed with its price
+unknown).
+
+**Classes** are checkboxes. Two of them change which model is picked when nothing is chosen:
+**Safe default** (the model an unattended run uses for the provider; give it to one model per
+provider) and **Balanced** (the cheapest balanced model is picked). The others (Cheap, Premium,
+Reasoning, Large context, Local, Private, Vision) describe the model. A class the list does not know,
+kept from an older row, is shown as "other: <name>" and saved back unchanged.
+
+### What the server refuses
+
+The dialog disables its button and says why; the server applies the same rules and returns the same
+words:
+- a price that is not a number, or is negative;
+- a price override without both prices;
+- a registered model with only one of the two prices;
+- a price override with neither a model id nor an underlying model.
+
+The server also accepts a class it does not know, for older rows, and writes one warning to
+`splunkd.log` per save naming it.
+
 ## CDTSM (Cisco Deep Time Series Model) — admin setup
 
 CDTSM is Splunk AI Toolkit's pre-trained, generative time-series model
-(feature preview, MLTK 5.7.3+). The assistant ships three playbooks that
+(feature preview, MLTK 5.7.3+). Adjutant AI ships three agent templates that
 drive it — **Smart Forecasting**, **Anomaly Detection**, **Predictive
 Alerting**. It is an **integration, not a reimplementation**: the model
 and the `apply CDTSM` command live in AI Toolkit; this app only
-orchestrates them (3 seed playbooks + 1 skill + 1 read-only tool, all
+orchestrates them (3 agent templates + 1 skill + 1 read-only tool, all
 frontend — **no new REST handler, KVStore collection, or egress**).
 Architecture: [the CDTSM forecasting guide](./integrations/cdtsm-forecasting.md) §8.
 
-**Unlike the other AI-Toolkit playbooks, CDTSM creates no models** — there
+**Unlike the other AI-Toolkit agents, CDTSM creates no models**. There
 is nothing to share and nothing to clean up in the section below. Saved
 searches follow `cdtsm_<purpose>_<thing>_aiworkbench_v<N>`.
 
@@ -1053,7 +1222,7 @@ searches follow `cdtsm_<purpose>_<thing>_aiworkbench_v<N>`.
 | Caller capability | `list_tokens_scs` | n/a |
 | Rate limit | ~50 req/min (beta, AI-Toolkit-managed) | your CTS server's capacity |
 
-If MLTK is absent or < 5.7.3 the three playbooks simply do not appear in
+If MLTK is absent or < 5.7.3 the three agents simply do not appear in
 the picker (they declare `dependent_apps = [{Splunk_ML_Toolkit, 5.7.3}]`).
 **Predictive Alerting** additionally requires the caller to hold `power`
 or `admin` (it creates a scheduled alert).
@@ -1086,7 +1255,7 @@ required:
 ### Verifying it
 
 - Run the read-only **`splunk_check_cdtsm_availability`** tool (from the
-  Ask tab) — it reports MLTK version, deployment kind, `list_tokens_scs`,
+  Console): it reports MLTK version, deployment kind, `list_tokens_scs`,
   and the on-prem endpoint config in one structured answer.
 - Or prove the model directly in Search:
   `| inputlookup internet_traffic.csv | apply CDTSM bits_transferred forecast_k=384 show_input=f`
@@ -1100,17 +1269,17 @@ required:
   second `apply CDTSM` call with a holdback) to prove accuracy — factor it
   into the ~50 req/min beta budget; keep CDTSM scheduled searches off
   minute cadence.
-- The playbooks pin a TrackMe feed-health header when TrackMe is installed
+- The agents pin a TrackMe feed-health header when TrackMe is installed
   and omit it cleanly when it is not.
 
 ## Auditing AI-Assistent-created MLTK models
 
-The AI-Toolkit playbooks train models in the calling user's current
+The AI-Toolkit agents train models in the calling user's current
 app and then call a privileged server-side handler
 (`/services/itmip_llm/mltk_share`) to promote each model's lookup-
 table-file to `owner=nobody, sharing=global`. This means:
 
-- A normal `user` or `power` role can use the AI-Toolkit playbooks
+- A normal `user` or `power` role can use the AI-Toolkit agents
   end-to-end without holding `admin_all_objects` — the privileged
   handler does the share on their behalf.
 - The handler refuses any model name that doesn't match
@@ -1167,16 +1336,150 @@ End users still need MLTK's own `apply_ml_command` /
 `ai`. The AI-Assistent share handler **does not** elevate those — it
 only elevates ACL writes for files matching the `aiworkbench` pattern.
 Grant the MLTK capabilities to the roles that should be able to
-train models via the playbooks.
+train models via the agents.
+
+## The Tool calls panel: what administrators should know
+
+Every Ask question shows a **TOOL CALLS** panel with each step, its live progress, and
+**Stop** and **Cancel search**. The user manual describes it ("The Tool calls panel").
+For administrators:
+
+- **No setting.** Every user sees the panel; it cannot be switched off. Two tabs of a
+  step's details, **Splunk job** and **IDs**, and the **Trace view** are shown only to
+  administrators and to roles with the `adjutant_trace_view` capability.
+- **Trace view.** Every step of the question on one time axis, with a search's queued,
+  running and fetch parts; steps that ran at the same time are marked with a bracket.
+  Columns give the start, the duration, the status, a model round's tokens in and out,
+  a search's events read and rows, and what reached the model. *Attention only*, *Splunk
+  only*, sorting by start or by duration, and **Export** (the step records as JSON: ids,
+  timings, statuses, counters and SPL, never the tools' input or output).
+- **Job Inspector.** The **Splunk job** tab opens Splunk's Job Inspector in its own
+  window while the job exists. Splunk keeps Adjutant's search jobs for 10 minutes; after
+  that the tab says so and offers **Run again in Search** (a new run) instead.
+- **Model timings.** For a connection that goes through the Splunk proxy, a model round's
+  Timing tab shows the provider call as the proxy measured it, the proxy's own overhead
+  (derived), and the network time to the provider when the provider reports its processing
+  time (OpenAI and Azure do); otherwise it says *not measured*.
+- **Ollama.** Before each model round on an Ollama connection, Adjutant asks the Ollama host
+  which models are loaded (`GET /api/ps`, two seconds at most, through the proxy when the
+  connection is proxied). When the model was not loaded, the round is marked *Model was not
+  loaded; this round included loading it*. The load time itself is not measured.
+- **Thresholds.** The two-minute prompt on a long search (**Keep waiting** /
+  **Cancel search**) is built in. The `Slow: …` note follows each tool's usual time once
+  there is one: the health sweep computes the median and 95th percentile per tool from the
+  last 14 days of `event=tool_step` telemetry, where there are at least 20 samples, into the
+  KV collection `itmip_step_baselines`. Model rounds are grouped by the model family the
+  provider reports (for example `gpt-4o`), or by provider type when it reports none, never by
+  the model or deployment name you configured; every user can read this collection. A step is then
+  *Slow* at twice its 95th percentile and at least 5 s, and the note gives the usual time.
+  Without a baseline the fixed thresholds apply: 20 s for a search, 30 s for a model round,
+  15 s for any other step. None of these can be configured in this release.
+- **Nothing is cancelled for the user.** A search is only cancelled when the user
+  presses **Cancel search** or **Stop**. **Stop** does not undo anything: an object
+  already created stays. A stopped question is recorded as cancelled, never as answered.
+- **Search slots.** The app runs at most three of one user's searches at the same time,
+  and fewer when the user's roles allow fewer concurrent searches (one less than the
+  role's search quota, at least one). Extra searches wait, and the step reads
+  *Waiting for a free search slot*. Raise the role's search quota (`srchJobsQuota`) if
+  users wait here often.
+- **After the fact.** Opening a past question from History shows its panel again, from
+  the steps stored with it. Rows saved by a release before this one have no panel. A
+  support bundle's `timeline.json` also lists every step of every run with its start
+  and end.
+
+## Domain Workspace model edits after upgrading to 2.7.0
+
+From 2.7.0, an edit an administrator makes to a Domain Workspace model (a panel, a knowledge
+entry, a tab or a perspective) belongs to one Organisation. Users in that Organisation see it;
+users in every other Organisation see the model as shipped, or their own Organisation's edit.
+An edit is saved into your own Organisation unless you name another one.
+
+Saved and published searches built from a model are shared by every Organisation, so they are
+always built from the model as shipped, never from one Organisation's edits.
+
+### What happens to edits made before 2.7.0
+
+Edits made before 2.7.0 did not record an Organisation. The first time a model is read after the
+upgrade, Adjutant AI counts the rows in the Organisations list, **including the default
+Organisation (DFLT)**:
+
+- **Exactly one Organisation:** every earlier edit is copied to it. Nothing for you to do.
+- **Two or more Organisations:** every earlier edit is **held**. A held edit is shown to nobody:
+  users see the model as shipped until you decide where the edit belongs.
+
+The earlier edits themselves are never changed or deleted by the upgrade, and an edit an
+Organisation has already made in 2.7.0 is never overwritten by an earlier one. The check runs
+once per model, and again only for an earlier edit that has changed since.
+
+Each run is written to the platform audit log (`itmip_llm_audit.log`):
+
+```
+workspace_overlay_migrated model=<model id> version=1 orgs=<count> legacy=<n> assigned=<ORG:n|-> held=<n> skipped=<n>
+workspace_overlay_held model=<model id> id=<sub-item id> overlaid_by=<user>
+```
+
+A `workspace_overlay_migration_failed` line means the check could not complete. Users still see
+the model as shipped plus any edits already copied, and the check is tried again on a later read.
+
+### Resolving held edits
+
+In 2.7.0 held edits are resolved through the REST endpoint below; a screen for this follows in a
+later release. Every call needs an administrator role (`admin`, `sc_admin` or `splunk_admin`), and every
+decision is written to the audit trail as `workspace_overlay_migration`.
+
+**List the held edits of a model:**
+
+```
+curl -k -u admin https://localhost:8089/services/itmip_llm/workspace/overlay_migration \
+  -H 'Content-Type: application/json' \
+  -d '{"model_id": "<model id>", "action": "status"}'
+```
+
+The reply gives the number of Organisations, the outcome per earlier edit (`assigned:<ORG>`,
+`held` or `discarded`), and for each held edit its sub-item `id`, `kind`, `overlaid_by` and
+`overlaid_at`.
+
+**Give a held edit to one Organisation:**
+
+```
+curl -k -u admin https://localhost:8089/services/itmip_llm/workspace/overlay_migration \
+  -H 'Content-Type: application/json' \
+  -d '{"model_id": "<model id>", "action": "assign", "id": "<sub-item id>", "org": "<ORG>"}'
+```
+
+**Give a held edit to every Organisation:**
+
+```
+curl -k -u admin https://localhost:8089/services/itmip_llm/workspace/overlay_migration \
+  -H 'Content-Type: application/json' \
+  -d '{"model_id": "<model id>", "action": "assign", "id": "<sub-item id>", "org": "*"}'
+```
+
+> **Warning:** `"org": "*"` shows the edit to **every** Organisation, including ones it was never
+> written for. That is how releases before 2.7.0 behaved, and it is the exposure 2.7.0 removes.
+> Use it only when you know the edit is meant for all of them. An Organisation that already has
+> its own edit of that sub-item keeps its own; the reply lists, per Organisation, `assigned` or
+> `conflict`.
+
+**Discard a held edit:**
+
+```
+curl -k -u admin https://localhost:8089/services/itmip_llm/workspace/overlay_migration \
+  -H 'Content-Type: application/json' \
+  -d '{"model_id": "<model id>", "action": "discard", "id": "<sub-item id>"}'
+```
+
+Discarding deletes the earlier edit. It is the only action that removes one, and it cannot be
+undone except from a backup.
 
 ## Operational runbook
 
-### Adding a new tenant
+### Adding a new Org
 
 1. Org & BU first (Orgs & BUs tab).
 2. Provision the central LLM config(s) for that Org / BU (Settings).
-3. Clone or scope playbooks the new tenant should see (Playbooks).
-4. (Optional) Disable tools the tenant shouldn't have (Tools).
+3. Clone or scope agents the new Org should see (Agents).
+4. (Optional) Disable tools the Org shouldn't have (Tools).
 
 ### Licence renewal
 
@@ -1194,7 +1497,7 @@ Tokens & Costs preserves the historical attribution.
 
 ### Customer auth hook failure
 
-If users start seeing **"customer_auth hook failed: …"** in their Ask
+If users start seeing **"customer_auth hook failed: …"** in their Console
 panel:
 
 1. Tail `$SPLUNK_HOME/var/log/splunk/splunkd.log` for
@@ -1261,17 +1564,41 @@ in the product is affected.
 | Tier | What gets written, when |
 |---|---|
 | **Continuous change log** (`changes_index`, default `itmip_changes`, ~60-day retention) | One event per successful POST/DELETE on every backed-up collection. Lets restore replay forward from a snapshot to any timestamp. |
-| **Daily snapshot** (`snapshot_index`, default `itmip_snapshots`, 30/26w/24mo retention) | Full per-row snapshot of every critical-tier + user-personal collection. Manifest with SHA-256 per collection. Verification pass. Referenced-credentials inventory (Phase 9.3). |
+| **Daily snapshot** (`snapshot_index`, default `itmip_snapshots`, 30/26w/24mo retention) | Full per-row snapshot of every backed-up collection (below). Manifest with SHA-256 per collection. Verification pass. Referenced-credentials inventory. |
 
-Backed-up collections: `itmip_organisations`, `itmip_business_units`,
-`itmip_llm_configs`, `itmip_tool_assignments`, `itmip_tool_overrides`,
-`itmip_ai_use_cases`, `itmip_llm_custom_tools`, `itmip_mcp_servers`,
-`itmip_mcp_tools`, `itmip_llm_license`, `itmip_llm_mltk_models`,
-`itmip_user_history`. Explicitly excluded:
-`itmip_llm_custom_tool_calls` (audit log — regeneratable, customers
-can mirror via SPL if forensic durability is required).
+**What is backed up** — Adjutant's own collections:
+
+- **Configuration:** Organisations and Business Units, model connections and price overrides,
+  tool assignments and overrides, agents and skills, custom tools, MCP servers and their tools,
+  the licence, ML models, the knowledge layer (connectors, entries and rules), scoring
+  configuration, input sources and collectors, and the content-pack state.
+- **History and audit:** user history, the authoring audit log, agent feedback and tuning
+  suggestions, template runs and model-call attempts.
+- **Per-Organisation data:** memory (including each integration's resume position), mappings,
+  the reconciliation stores, the record of verified ServiceNow relationship types, and each
+  Organisation's edits to Domain Workspace models.
+- **Operational state:** integration receipts, the ServiceNow ownership and safeguard ledgers
+  (which ServiceNow records an integration owns, and every authority check it ran), the
+  network-policy store and its ledger, RCA runs and their state, fraud entities and readiness, and
+  the model-catalogue marker.
+
+**Not backed up:** destinations you chose for an integration (see below), the queue of runs in
+progress, the per-Organisation run history (only written when that option is turned on), and the
+custom-tool call log (an audit log you can mirror with SPL if you need it kept).
 
 ### What is NOT covered by the KVStore backup
+
+**What your integrations write to your own destinations is not backed up.** **Run backup now**
+and the daily snapshot cover Adjutant's own collections only (listed above). The records an
+integration writes to a destination you chose for it — a KV Store collection named in its
+mapping, an index or an external system — are not in any Adjutant backup, and a restore does not
+bring them back. They are rebuilt from their sources instead. (Adjutant's own stores that an
+integration writes to, such as the network-policy store, are backed up.) An
+integration that reads its source in full on every run needs nothing more than its next run. For
+an integration that reads only what changed, open its **Integration State** panel, choose
+**Force resume** on the resource, replace the whole value with a time before the data that was
+lost, written as `YYYY-MM-DD HH:MM:SS` (for example `2026-10-01 00:00:00`), and **Save**; the next
+run reads every record changed since that time. If you need a copy of a destination itself, include it in your own Splunk backup.
 
 `storage/passwords` (LLM API keys, tool credentials, MCP credentials,
 proxy credentials, TLS CA blobs, Cryptolens license blob) lives
@@ -1279,11 +1606,11 @@ outside KVStore by design. The v0.8.0 daily backup writes a
 **referenced-credentials inventory** event that lists the names of
 every credential referenced by the snapshotted configs, plus a
 `present_at_backup_time` boolean per name. After a restore the admin
-reads the inventory and re-populates secrets via Settings → Tool
-credentials. Optional cleartext backup to a restricted index (Option
-B in the design doc §5.2) is deferred to a later release —
+reads the inventory and re-creates the secrets in `storage/passwords`
+(REST API or CLI). There is no cleartext secrets backup: setting
 `secrets_backup.mode = cleartext_restricted` in
-`itmip_ai_workbench.conf` is currently a no-op with a warning.
+`itmip_ai_workbench.conf` still writes only the inventory, with a
+warning.
 
 `$SPLUNK_HOME/etc/auth/splunk.secret` should be backed up by the
 infra team out-of-band — that's Splunk's own documented practice and
@@ -1311,6 +1638,31 @@ replication handles distribution. Key knobs:
 | `secrets_backup.mode` | `inventory_only` | Option A. Option B (`cleartext_restricted`) reserved. |
 
 See `README/itmip_ai_workbench.conf.spec` for the full schema.
+
+### The Backups list and Detail
+
+Each row of the Backups list shows when the backup ran, the app version, the collections and rows it
+holds, whether its verification passed, and the secrets the backed-up settings use. A backup never
+holds secret values, only their names. When some are not stored on this Splunk, the row says so in
+amber, once per secret: for example *"1 not stored on this Splunk: splunk_o11y_apm_token (used by 12
+items). A restore elsewhere needs it re-entered."* Twelve custom tools that use one token are one
+secret to enter, not twelve. This is a note for restoring, not a fault in the backup: the
+verification column is separate.
+
+**Run backup now** asks for confirmation in the page, then runs in the background; the page shows
+its progress.
+
+**Detail** opens one backup, read-only. It closes only through the **×** at the top or **Close** at
+the bottom; a click beside it and Escape do nothing. Its header and footer stay in place and the body
+scrolls. It shows:
+- *Secrets these settings use*: one row per secret, whether it was stored at backup time, the items
+  that use it (**used by N items** opens the list), and where to enter it;
+- *Collections*, grouped by area (agents and settings, integrations and mappings, reconciliation,
+  Workspace, and per-Org for collections named after one of your Orgs) and closed until you open one, each group with its row count; every collection
+  with its rows and the start of its fingerprint;
+- the verification result.
+
+**Restore from this backup…** at the bottom left opens the restore wizard below.
 
 ### Auditing the backup
 
@@ -1344,7 +1696,9 @@ from this backup…**):
    that collection.
 3. **Acknowledge + commit.** Tick the *"I understand this will
    overwrite the current KVStore contents"* checkbox. The
-   **Restore** button activates. The commit runs synchronously:
+   **Restore** button activates, and asks once more in the page before
+   anything is written. The wizard closes only through its **×** or
+   **Close** (**Done** after a commit). The commit runs synchronously:
    per-collection it (a) dumps current rows to the snapshot index
    as a forensic rollback aside (`sourcetype=itmip:kvstore:pre_restore`),
    (b) deletes every live row, (c) inserts target rows preserving
@@ -1364,10 +1718,10 @@ index=itmip_snapshots sourcetype=itmip:kvstore:restore
 
 **Restore never touches `storage/passwords`.** Credentials are NOT
 re-populated by a restore — admins re-enter LLM API keys via
-**Settings → LLM configurations**, custom tool credentials via the
-custom tool editor, and MCP server credentials via the MCP server
-editor. The Detail modal's Referenced credentials inventory tells
-you exactly which credentials each restored config needs and where
+**Settings → LLM configurations**, custom tool credentials directly in
+`storage/passwords` (the custom tool editor holds only the credential's
+name), and MCP server credentials via the MCP server editor. Detail's *Secrets these settings use* table tells
+you exactly which secrets the restored settings need and where
 to enter each one.
 
 **Lock behaviour.** Only one restore runs at a time across the SH.
@@ -1385,9 +1739,8 @@ TROUBLESHOOTING doc §8 for symptom-driven help.
 
 ### Legacy / older instructions
 
-Pre-0.8.0 installs used `splunk export kvstore` or
-`tools/export_kvstore_seeds.sh` for ad-hoc snapshots. Those still
-work but are no longer the recommended path — the indexed backup
+Pre-0.8.0 installs used `splunk export kvstore` for ad-hoc
+snapshots. That still works but is no longer the recommended path: the indexed backup
 above runs daily, verifies itself, and survives KVStore corruption.
 
 Restoring **only the app** (e.g. moving installs) still requires
@@ -1398,8 +1751,8 @@ the encrypted blob is GUID-bound at the vendor side.
 
 A **content pack** is one portable, versioned, integrity-checked file
 (`adjutant-content-pack-v<YYYY.MM.DD>.<N>.itmipcontent`) that delivers
-corrected or improved **content** — skills, knowledge (static rules +
-curated entries), and playbooks — **without a full app release**. It
+corrected or improved **content**: skills, knowledge (static rules +
+curated entries) and agent templates, **without a full app release**. It
 lets a maintainer ship a fix to you in minutes instead of waiting for
 the next Splunkbase build. The deep dive (version scheme, integrity
 model, build CLI for maintainers) lives in
@@ -1427,7 +1780,7 @@ you on?") so you always know your baseline.
    the affected content collections from that backup.
 4. **Apply.** The import verifies the pack hash, then upgrades **only**
    the items you have **not** modified and reports the rest. Your Org/BU
-   scoping, ownership, sharing, tool/playbook assignments and `_key`s are
+   scoping, ownership, sharing, tool/agent assignments and `_key`s are
    **always preserved** — a re-scoped item is never treated as
    "modified" and is never blanked.
 
@@ -1459,10 +1812,10 @@ per-status counts.
 
 A pack can **retire** an item. Retire is **not a delete** — it sets a
 reversible **`retired` tag** and the item **stays installed**. A retired
-item is **hidden** from the normal user lists (Playbooks / Skills /
+item is **hidden** from the normal user lists (Agents / Skills /
 Knowledge) **and inert**: it is not selectable, runnable, advertised, or
 injected into prompts, and it is also dropped from the inbound MCP
-playbook list/run. To bring it back, an **admin / sc_admin removes the
+agent list/run. To bring it back, an **admin / sc_admin removes the
 `retired` tag** — the item is usable again immediately. (Because the tag
 is part of the item's content, re-enabling it makes the item
 "customer-modified", so a later pack won't silently re-retire it — it
@@ -1477,7 +1830,7 @@ surfaces as *skipped — customer-modified* instead.)
 
 - Content packs (versioned content delivery, integrity model, maintainer build CLI) → the content-packs guide.
 - Tool catalogue, custom tools, MCP servers → [the tool catalogue](./tools/tool-catalogue.md).
-- Dashboard Studio (JSON) pipeline + known failure modes → the Dashboard Studio guide. Studio template currently ships as **draft** (v0.9.5) — that doc covers why and what needs to land for promotion.
+- Dashboard Studio (JSON) pipeline + known failure modes → the Dashboard Studio guide. The Studio agent template currently ships in preview (`draft`, v0.9.5); that doc covers why and what needs to land for promotion.
 - End-user concerns → [the user manual](../user/user-manual.md).
 - New install → [the installation guide](./installation.md).
 - Something is broken → the troubleshooting guide.

@@ -4,6 +4,11 @@ sidebar_position: 3
 
 # Stateless operation
 
+**App version:** 2.7.0
+**Last updated:** 2026-09-22
+**Audience:** Splunk administrators running Adjutant AI on a search head that is
+rebuilt from an image.
+
 **What this page is.** The single page for stateless mode: what it is, what it buys you, what it
 costs you, how to configure it, how to verify it, and where Adjutant tells you it is working.
 This is the operator's view.
@@ -65,7 +70,7 @@ is silent and much worse. Stateless mode refuses instead, and names the key it w
 
 ## 3. What is implemented today
 
-Adjutant 2.5.9. Stateless mode is **off by default** and every key below is inert until you turn it
+Adjutant 2.7.0. Stateless mode is **off by default** and every key below is inert until you turn it
 on, so nothing here changes an existing install.
 
 > **The prerequisite, before anything else on this page: stateless mode requires the Splunk
@@ -78,7 +83,7 @@ on, so nothing here changes an existing install.
 > credential is minted *for* the instance, so there is no key to store, and "no secret at rest"
 > holds without needing a secret store first. The cost is that an S3-compatible store reached
 > through `endpoint_url` does **not** get you off EC2 — the credential mode is still
-> instance-role-only. Azure is a planned milestone (SL5) and is not built.
+> instance-role-only. Azure is not built.
 
 | Capability | State | What it means for you |
 |---|---|---|
@@ -88,10 +93,10 @@ on, so nothing here changes an existing install.
 | `object_store` backup sink | **In** | The snapshot this restores from; required when stateless is on |
 | Readiness gate, no-implicit-cold-start | **In** | Scheduled work waits for the boot, and refuses rather than starting empty |
 | Operator visibility (system messages, boot record, run states) | **In** | §14 |
-| **AWS Secrets Manager as the credential store** (`awssm://`) | **In** | Read and write. A `credential_ref` may be `awssm://<secret-id>`, `#<json-field>` for one key of a key/value secret, `@AWSPREVIOUS` or `@<version-id>` to pin a version. Verified against the real service by `tools/verify_secrets_store.py` |
+| **AWS Secrets Manager as the credential store** (`awssm://`) | **In** | Read and write. A `credential_ref` may be `awssm://<secret-id>`, `#<json-field>` for one key of a key/value secret, `@AWSPREVIOUS` or `@<version-id>` to pin a version. Check it against your own account before you rely on it (§4.3) |
 | `storage_passwords_policy = refuse` | **In**, ships `allow` | The switch that stops a credential resolving from the local store — the one that dies with the instance. Ships off so an upgrade cannot take every credential with it; turn it on once your refs are migrated |
 | Azure Key Vault (`azkv://`) | **NOT built** | Refused by name |
-| Declarative schedules (`itmip_ai_schedule.conf`) | **NOT built** | A scheduled ask is still a saved search; recreate or restore it |
+| Declarative schedules (`itmip_ai_schedule.conf`) | **NOT built** | A scheduled agent job is still a saved search; recreate or restore it |
 | Destination durability gate, drain hook | **NOT built** | A `kvstore` or spool destination on a rolling instance is not yet refused for you |
 | Azure Blob provider | **NOT built** | `provider = azure_blob` is refused at boot |
 | Licence identity pinning (`[licensing] environment_id`) | **NOT built** | A rebuilt instance may consume a fresh activation |
@@ -160,7 +165,7 @@ healthy and cannot be restored from (§4.4).
 | `restore_on_start` | `1` | Restore at boot. `0` boots ready without restoring — for a brand-new environment only |
 | `restore_timeout_seconds` | `600` | Exceeding it is `degraded`, never a partial run |
 | `allow_cold_start` | `0` | `1` lets an empty watermark mean "first run". A provisioning-window setting; prefer the per-integration marker (§13.3) |
-| `readiness_gate` | `1` | Refuse scheduled asks until the boot says ready |
+| `readiness_gate` | `1` | Refuse unattended runs until the boot says ready |
 | `write_through` | `1` | Write the object store before KV Store, and fail the caller if it refuses |
 | `lease_ttl_seconds` / `lease_renew_seconds` | `120` / `40` | Single-writer lease lifetime and renewal |
 | `retention_snapshots_daily` / `_weekly` / `_monthly` | `7` / `4` / `3` | What the `object_store` backup sink keeps |
@@ -169,7 +174,7 @@ healthy and cannot be restored from (§4.4).
 | `secrets_backend` | `none` | `aws_secrets_manager` turns on `awssm://` refs (§4.3). Nothing else in this block does anything while it is `none` |
 | `secrets_write` | `app` | `app` lets the UI store a credential; `operator` accepts only a ref it can resolve and needs no write permission at all. **Neither can delete** — a rotation is a new version |
 | `storage_passwords_policy` | `allow` | `refuse` stops a credential resolving from Splunk's own store. Refused at boot when `secrets_backend = none`, because that would leave no store at all |
-| `secret_cache_ttl_seconds` | `300` | How long a resolved external secret is held in memory. Without it an Ask makes one AWS round trip per credential. Dropped on rotation |
+| `secret_cache_ttl_seconds` | `300` | How long a resolved external secret is held in memory. Without it a run makes one AWS round trip per credential. Dropped on rotation |
 | `secrets_prefix` | `adjutant/` | Where an operator is expected to put this environment's secrets, and what the IAM policy should be scoped to. Informational — refs name their secret in full |
 
 Keys that exist only so their refusal is **explicit** — Adjutant names them rather than accepting a
@@ -182,7 +187,7 @@ value it will not honour:
 | `watermark_write_mode` | anything but `synchronous` | A batched watermark can be lost on the roll it exists to survive |
 | `fail_closed_on_restore_error` | `0` | The boot is fail-closed on every branch. Accepting `0` and ignoring it is how an operator discovers during an incident that it never applied |
 | `sse` | `none` | See §10 |
-| `secrets_backend` | anything but `none` / `aws_secrets_manager` | `azure_key_vault` arrives with the Azure milestone |
+| `secrets_backend` | anything but `none` / `aws_secrets_manager` | `azure_key_vault` is not built |
 | `allow_env_secrets` | `1` | Reserved. `env://` refs are refused; the key exists so the refusal is explicit rather than a silent miss |
 
 A refusal names the key rather than falling back to a default — deliberately unlike `[indexes]`,
@@ -233,16 +238,24 @@ destroy your credentials.
 > `…:secret:adjutant/prod/anthropic-AbC123`. A resource pattern without the wildcard matches
 > nothing, and the failure looks like a missing secret rather than a policy mistake.
 
-**Prove it before you rely on it.** `tools/verify_secrets_store.py` reads and writes against the
-real service and reports what it proved:
+**Prove it before you rely on it.** Run these on the instance itself, so the instance role is the
+identity being tested. The read prints only the version id, never the secret:
 
 ```bash
-export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...   # not needed on EC2
-python3 tools/verify_secrets_store.py --region eu-west-1
+# Every posture: the role can read a secret under your prefix
+aws secretsmanager get-secret-value --region eu-west-1 \
+    --secret-id adjutant/prod/anthropic --query VersionId
 
-# on a customer's account, read-only, needs only GetSecretValue:
-python3 tools/verify_secrets_store.py --secret-id adjutant/prod/anthropic
+# secrets_write = app only: the role can create and update a throwaway secret
+aws secretsmanager create-secret --region eu-west-1 \
+    --name adjutant/prod/_verify --secret-string probe
+aws secretsmanager put-secret-value --region eu-west-1 \
+    --secret-id adjutant/prod/_verify --secret-string probe2
 ```
+
+The role has no `DeleteSecret`, so remove `adjutant/prod/_verify` afterwards with an
+administrator's credentials. Support can also supply a verification script that runs the same
+checks and reports what each one proved.
 
 ### 4.4 The one configuration to avoid
 
@@ -260,8 +273,8 @@ up paying to version a data lake or losing a watermark you needed.
 
 | | **Stateless state** | **AI Driven Integration data** |
 |---|---|---|
-| What it is | Watermarks, the lease, tenancy, playbooks, mappings, boot records | Records an integration landed: nodes, edges, manifests, extracts |
-| Typical key | `state/wm/<integration>.json` | `o11y/inbound/nodes/env_code=PRD/dt=2026-08-19/run=<id>/part-0000.parquet` |
+| What it is | Watermarks, the lease, Org and BU configuration, governed agent definitions, mappings, boot records | Records an integration landed: nodes, edges, manifests, extracts |
+| Typical key | `state/wm/<integration>.json` | `<bucket>/<prefix>/<integration>/dt=<date>/run=<id>/part-0000.parquet` |
 | Size | Hundreds of bytes to a few KB | Megabytes |
 | Write pattern | **Rewritten constantly**, same key every run | **Written once**, new key every run |
 | Read pattern | Every boot, all of it | Rarely, by a downstream consumer |
@@ -462,8 +475,8 @@ write-once, under a key that already carries the run id.
 
 ### 9.1 Versioning: useful here too, and it changes the expiry you want
 
-An earlier draft of this document said versioning was not needed for integration data. That was
-too quick. Each run writes a new key, so a second version of the same key is rare — but versioning
+Versioning is worth having on integration data too. Each run writes a new key, so a second
+version of the same key is rare, but versioning
 still earns its place, for the same reason it does on state: recovering from a bad run, and seeing
 what a previous run actually wrote when you are working out why a downstream consumer disagrees.
 
@@ -562,8 +575,8 @@ The third row is what decides it. With SSE-S3, anyone who can read the bucket ca
 so the bucket policy is the only gate. With KMS there are two, and they can be held by different
 people.
 
-**Which prefix needs it more.** Stateless state carries tenancy configuration, playbooks and
-mappings — customer content. Integration data carries whatever the integration extracted, which
+**Which prefix needs it more.** Stateless state carries Org and BU configuration, agent definitions and
+mappings: customer content. Integration data carries whatever the integration extracted, which
 may be more sensitive still. In practice, if you enable KMS, enable it for the bucket rather than
 trying to split it.
 
@@ -598,8 +611,9 @@ it. So the command above is the step that actually encrypts anything.
 ## 11. Credentials: the instance role, and nothing else
 
 **The instance role is not the recommended option, it is the only one** — see the note in §3.
-`auth_mode = access_key` is refused at boot until the external secret store lands, because an
-access key has to be stored somewhere that survives a rebuild, and that place does not exist yet.
+`auth_mode = access_key` is refused at boot. The secret store can hold a key, but reaching the
+store needs a credential of its own, so on EC2 the instance role is the only thing that breaks the
+cycle (§4.2).
 
 **On EC2, no key should exist on the instance.** Attach an IAM role and Adjutant resolves
 credentials from the instance metadata service — the only form that survives a rebuild, because an
@@ -673,7 +687,7 @@ The stateless store resolves its own credentials the same way and is unaffected 
 integrations do.
 
 `s3:GetBucketVersioning` and the other `s3:GetBucket*` reads are **not** in this policy. The app
-does not use them; `tools/verify_s3_store.py` does, so run that with an administrator's
+does not use them; the bucket checks in §13.1 do, so run those with an administrator's
 credentials rather than widening the role.
 
 ### If you must use an access key
@@ -718,16 +732,30 @@ app problem from inside Splunk.
 
 ### 13.1 The bucket, before Adjutant touches it
 
-Writes only under the prefix you give it and cleans up after itself, so it is safe against a live
+Two checks. The bucket settings need an administrator's credentials, not the instance role,
+because they read bucket-level settings (`s3:GetBucketVersioning` and friends) that the role
+deliberately does not have (§11):
+
+```bash
+aws s3api get-bucket-versioning     --bucket <bucket>   # "Status": "Enabled"
+aws s3api get-public-access-block   --bucket <bucket>   # all four flags true
+aws s3api get-bucket-encryption     --bucket <bucket>   # the rule from §10
+```
+
+The object round trip runs on the instance, so the instance role is what is tested. It writes only
+under a `_verify` folder of your prefix and removes what it wrote, so it is safe against a live
 bucket:
 
 ```bash
-python3 tools/verify_s3_store.py \
-    --bucket <bucket> --region <region> --prefix <prefix>/_verify
+echo probe > /tmp/adjutant_probe.txt
+aws s3 cp /tmp/adjutant_probe.txt s3://<bucket>/<prefix>/_verify/probe.txt
+aws s3 ls  s3://<bucket>/<prefix>/_verify/
+aws s3 cp  s3://<bucket>/<prefix>/_verify/probe.txt -
+aws s3 rm  s3://<bucket>/<prefix>/_verify/probe.txt
 ```
 
-Run it with an administrator's credentials, not the instance role — it checks bucket-level settings
-(`s3:GetBucketVersioning` and friends) that the role deliberately does not have (§11).
+These do not exercise the conditional writes the lease depends on (§12). Support can supply a
+verification script that also tests those against your bucket.
 
 ### 13.2 The boot, after you enable it
 
@@ -746,9 +774,9 @@ aws s3 ls s3://<bucket>/<prefix>/<environment_id>/_meta/boot/
 
 | `state` | Meaning | What runs |
 |---|---|---|
-| `restoring` | The boot is working | Scheduled asks are refused; the dispatcher claims nothing |
+| `restoring` | The boot is working | Unattended runs are refused; the dispatcher claims nothing |
 | `ready` | Restore complete and verified | Everything |
-| `degraded` | The restore was incomplete, or state exists without its environment marker | Interactive use only — scheduled asks refused, by design (never partially restore and then run) |
+| `degraded` | The restore was incomplete, or state exists without its environment marker | Interactive use only — unattended runs refused, by design (never partially restore and then run) |
 | `failed` | Configuration invalid, store unreachable, KV Store not ready, or the lease is held elsewhere | The same refusal, with the reason naming the key |
 
 The record also carries `snapshot_outcomes`, one entry per collection, with an honest verdict each:
@@ -810,7 +838,7 @@ stacks, and a healed condition clears its own banner.
 | `itmip_adjutant_backup_unrestorable` | Backups are being written and none of them can be restored here |
 | `itmip_adjutant_kvstore_required` | KV Store is disabled or failed — one stated cause instead of a cascade |
 
-**The Scheduled Ask tab's last-run cell.** A refused tick never enqueues a run, so there is no run
+**The Unattended tab's last-run cell.** A refused tick never enqueues a run, so there is no run
 to look at — the refusal is recorded on the schedule's single-flight guard and the cell reads
 `skipped`, qualified with the reason. Hover for the full sentence:
 
@@ -818,7 +846,7 @@ to look at — the refusal is recorded on the schedule's single-flight guard and
 |---|---|
 | `skipped (not ready)` | The boot has not opened the gate yet. Not an error — runs resume by themselves |
 | `skipped (no state)` | Refused: no restored watermark and no cold-start authorisation. The banner and `splunkd.log` name the key |
-| `skipped (gate error)` | The readiness check itself errored; refused rather than run blind (S8) |
+| `skipped (gate error)` | The readiness check itself errored; refused rather than run blind |
 
 A schedule that has opted out of single-flight has no guard row to record on, so its refusal is
 visible only in the banner and `splunkd.log` — the two above.
@@ -838,8 +866,7 @@ clears by itself when the boot opens the gate.
 including the ones that refused. "What did this instance do when it came up, and what did it
 decline to do" is answerable after the fact, from outside the instance.
 
-> The spec also describes a `boot_record_index` key for mirroring boot records into an index. That
-> is **not implemented**; the object in the bucket is the record today.
+> Boot records are not mirrored into an index. The object in the bucket is the record.
 
 ---
 
@@ -874,7 +901,7 @@ decline to do" is answerable after the fact, from outside the instance.
 ```
 [ ] IAM role attached to the instance, scoped to the prefixes
 [ ] Downstream consumers given their own read-only role
-[ ] tools/verify_s3_store.py passes
+[ ] the bucket checks and the object round trip in §13.1 pass
 ```
 
 **Adjutant (§4)**
@@ -898,7 +925,7 @@ decline to do" is answerable after the fact, from outside the instance.
 ```
 [ ] secrets_backend = aws_secrets_manager, and the instance role can read your prefix
 [ ] every credential field holds an awssm:// ref, not a bare name (§4.3)
-[ ] tools/verify_secrets_store.py passes against the real account
+[ ] the Secrets Manager checks in §4.3 pass against the real account
 [ ] storage_passwords_policy = refuse, once the refs are migrated — it is what
     stops a missed one resolving locally and dying with the instance
 [ ] Scheduled asks are recreated or restored (declarative schedules are not built)
