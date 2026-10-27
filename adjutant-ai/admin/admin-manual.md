@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Admin manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 2.7.0
+**App version:** 2.7.1
 **Last updated:** 2026-10-12
 **Audience:** Splunk users holding `admin`, `splunk_admin` **or** `sc_admin`
 on the search head where this app is installed. Those three are the whole

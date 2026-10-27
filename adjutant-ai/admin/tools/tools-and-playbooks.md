@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Overview: agent templates and built-in tools
 
-**App version:** 2.7.0
+**App version:** 2.7.1
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins, integrators and reviewers who need one flat
 reference of everything that ships in the box: every agent template (a ready definition of a governed agent, with every action gated and logged) and every

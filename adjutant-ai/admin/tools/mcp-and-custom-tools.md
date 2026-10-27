@@ -4,7 +4,7 @@ sidebar_position: 8
 
 # Extending Adjutant AI — MCP servers and custom tools
 
-**App version:** 2.7.0
+**App version:** 2.7.1
 **Last updated:** 2026-09-22
 **Audience:** Splunk administrators connecting Adjutant AI to systems outside
 Splunk, or exposing Adjutant AI's governed agents to other AI agents.

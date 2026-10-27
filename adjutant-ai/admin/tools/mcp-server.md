@@ -4,7 +4,7 @@ sidebar_position: 10
 
 # Adjutant AI: inbound MCP server (agents over MCP)
 
-**App version:** 2.7.0  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk
+**App version:** 2.7.1  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk
 admins publishing Adjutant AI's governed agents to other AI agents.
 
 Adjutant AI exposes a small set of tools over the Model Context Protocol so an external AI

@@ -4,7 +4,7 @@ sidebar_position: 15
 
 # Auditing — what Adjutant AI logs, and how to configure real audit logging
 
-**App version:** 2.7.0
+**App version:** 2.7.1
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins provisioning audit logging, and the auditors who read it.
 

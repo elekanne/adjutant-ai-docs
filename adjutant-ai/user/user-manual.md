@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # User manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 2.7.0
+**App version:** 2.7.1
 **Last updated:** 2026-10-12
 **Audience:** end users — anyone who does **not** hold `admin`,
 `splunk_admin` or `sc_admin` on the search head. If you hold any of those
@@ -122,7 +122,7 @@ the common case; see the section above on where the app runs).
 The header shows:
 
 ```
-Adjutant AI   [License badge if any]   v2.7.0
+Adjutant AI   [License badge if any]   v2.7.1
 App: <your-current-app>  •  User: <you>  •  Org: <ORG>  •  BU: <BU>
 ```
 

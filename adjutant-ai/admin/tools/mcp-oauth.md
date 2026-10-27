@@ -4,7 +4,7 @@ sidebar_position: 11
 
 # MCP OAuth 2.1 — connecting Adjutant AI to OAuth-protected MCP servers
 
-**App version:** 2.7.0  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk admins,
+**App version:** 2.7.1  ·  **Last updated:** 2026-09-22  ·  **Audience:** Splunk admins,
 integrators, security reviewers.
 
 Adjutant AI can connect to remote **Model Context Protocol (MCP)** servers that require
