@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Stateless operation
 
-**App version:** 2.7.1
+**App version:** 2.7.2
 **Last updated:** 2026-09-22
 **Audience:** Splunk administrators running Adjutant AI on a search head that is
 rebuilt from an image.

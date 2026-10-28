@@ -4,7 +4,7 @@ sidebar_position: 12
 
 # ServiceNow integration: tools, knowledge, governed agents
 
-**App version:** 2.7.1  ·  **Last updated:** 2026-10-12  ·  **Audience:** Splunk admins,
+**App version:** 2.7.2  ·  **Last updated:** 2026-10-12  ·  **Audience:** Splunk admins,
 SOC/ITOps engineers, integrators, security reviewers.
 
 Adjutant AI (formerly AI Workbench) can **read and write ServiceNow**: incidents, security incidents (SIR), changes,

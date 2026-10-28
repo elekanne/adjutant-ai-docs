@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Installation guide — Adjutant AI
 
-**App version:** 2.7.1
+**App version:** 2.7.2
 **Last updated:** 2026-09-22
 
 This guide walks a Splunk administrator through deploying **Adjutant
@@ -65,7 +65,7 @@ app to a working, licensed, multi-Org state.
 ### Artefact and access
 
 - The downloaded `.spl` (or `.tar.gz`) artefact for the version you're
-  installing. The version below is **2.7.1**; substitute as needed.
+  installing. The version below is **2.7.2**; substitute as needed.
 - A web-browsing client that can reach the Splunk SH on port `8000`
   (HTTPS by default).
 - At least one of: an Anthropic API key (for the bootstrap LLM),
@@ -189,7 +189,7 @@ $SPLUNK_HOME/bin/splunk restart
 
 > **SHC:** push the tarball through the deployer; members will
 > restart automatically when the bundle is applied. Verify each member
-> reports the same `version = 2.7.1` in `default/app.conf` after the
+> reports the same `version = 2.7.2` in `default/app.conf` after the
 > rolling restart.
 
 ## 1b. What the install actually creates

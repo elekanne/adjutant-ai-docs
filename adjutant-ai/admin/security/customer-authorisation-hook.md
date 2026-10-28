@@ -4,7 +4,7 @@ sidebar_position: 14
 
 # Customer authorisation hook
 
-**App version:** 2.7.1
+**App version:** 2.7.2
 **Last updated:** 2026-09-22
 **Audience:** whoever owns your IAM integration — the person who will write and
 maintain the hook file.

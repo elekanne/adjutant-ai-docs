@@ -4,7 +4,7 @@ sidebar_position: 7
 
 # Tools — Adjutant AI
 
-**App version:** 2.7.1
+**App version:** 2.7.2
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins managing which tools the assistant may use, and how
 they are scoped per Org and Business Unit.

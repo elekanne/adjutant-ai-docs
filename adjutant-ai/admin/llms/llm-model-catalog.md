@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # LLM Models & Cost Catalogue
 
-**App version:** 2.7.1
+**App version:** 2.7.2
 **Last updated:** 2026-09-22
 **Status:** definitive. This is the reference for *which LLMs Adjutant AI can use*,
 what they cost, how one gets chosen, and how to add one the app has never heard of.
