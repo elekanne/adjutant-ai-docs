@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # LLM reliability — retry, fallback & circuit breaker
 
-**App version:** 2.7.2
+**App version:** 2.7.5
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins configuring failover between AI connections, and
 anyone diagnosing why a run failed.

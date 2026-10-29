@@ -1,10 +1,10 @@
 ---
-sidebar_position: 13
+sidebar_position: 15
 ---
 
 # CDTSM: Cisco Deep Time Series Model agent templates
 
-**App version:** 2.7.2
+**App version:** 2.7.5
 **Last updated:** 2026-09-22
 **Audience:** Splunk admins and analysts setting up or running CDTSM forecasting
 and anomaly detection through Adjutant AI.

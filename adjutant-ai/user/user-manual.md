@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # User manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 2.7.2
+**App version:** 2.7.5
 **Last updated:** 2026-10-12
 **Audience:** end users — anyone who does **not** hold `admin`,
 `splunk_admin` or `sc_admin` on the search head. If you hold any of those
@@ -67,7 +67,10 @@ Adjutant AI turns plain English into:
 - **SPL searches** — generate, improve, audit, explain.
 - **Simple XML dashboards** and panels, including large multi-panel
   dashboards, which the assistant now assembles panel-by-panel so they
-  render reliably (no truncation or escaping errors).
+  render reliably (no truncation or escaping errors). A dashboard that reads
+  index data gets a **Data quality** row at the top when it is published:
+  the ingestion-check result for its sourcetypes (counts only) and the newest
+  event per index, or a plain "not checked" with the reason.
 - **Saved searches** and **alerts** (alert creation requires the
   `power` role).
 - **Reports** and **lookups**.
@@ -122,7 +125,7 @@ the common case; see the section above on where the app runs).
 The header shows:
 
 ```
-Adjutant AI   [License badge if any]   v2.7.2
+Adjutant AI   [License badge if any]   v2.7.5
 App: <your-current-app>  •  User: <you>  •  Org: <ORG>  •  BU: <BU>
 ```
 
@@ -441,8 +444,9 @@ answer tells you when that shaped the result:
   occurs. The result is exact, not an estimate.
 - **"Checked over the last hour, sampled 1:10"** — after the assistant saves
   a report or alert, it says what its check covered. Checks (dashboards too)
-  start with the last hour and widen only if they find nothing; the saved
-  object always keeps the time range you asked for.
+  start with the last hour and widen only if they find nothing; on a dashboard
+  each panel widens on its own and is reported with the window that found its
+  rows. The saved object always keeps the time range you asked for.
 - **"Already run at …"** — the same search over the same long time range
   runs once per request. A different breakdown of events that were already read
   is not read again; the answer points to the earlier search instead.
@@ -472,8 +476,7 @@ The LLM uses these Splunk tools on your behalf:
 |------------|-----------|-------|
 | Run a quick SPL probe | `splunk_run_search` | Side-effect commands (`outputlookup`, `sendemail`, `collect`, …) are refused. |
 | List indexes / saved searches / lookups / dashboards | `splunk_list_*` | What the LLM can see is what **you** can see. |
-| Run a named saved search | `splunk_run_saved_search_by_name` | Name validated against your inventory. |
-| Run a saved report | `splunk_run_report_by_name` | Same validation. |
+| Run a named saved search or report | `splunk_run_saved_search_by_name` | Name validated against your inventory. |
 | Fetch dashboard panel data | `splunk_get_dashboard_panel_data` | Doesn't return a screenshot — returns per-panel rows. |
 | Create / update SPL / saved search / alert / dashboard / report / lookup / field extraction | `splunk_create_*`, `splunk_update_*` | Requires you to have the right Splunk capability (alert creation needs `power`). |
 | AI Toolkit | `splunk_check_ml_capabilities`, `splunk_list_ml_models`, `splunk_ai_command` | Requires Splunk_ML_Toolkit installed and your role to allow `fit`/`apply`/`ai`. |

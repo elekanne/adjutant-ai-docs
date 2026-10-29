@@ -1,10 +1,10 @@
 ---
-sidebar_position: 12
+sidebar_position: 14
 ---
 
 # ServiceNow integration: tools, knowledge, governed agents
 
-**App version:** 2.7.2  ·  **Last updated:** 2026-10-12  ·  **Audience:** Splunk admins,
+**App version:** 2.7.5  ·  **Last updated:** 2026-10-12  ·  **Audience:** Splunk admins,
 SOC/ITOps engineers, integrators, security reviewers.
 
 Adjutant AI (formerly AI Workbench) can **read and write ServiceNow**: incidents, security incidents (SIR), changes,
@@ -885,6 +885,6 @@ client-credentials OAuth for ServiceNow MCP (ServiceNow does not offer it), rich
 - [the MCP OAuth guide](../tools/mcp-oauth.md) — OAuth for MCP servers (the ServiceNow MCP transport).
 - [the customer authorisation hook guide](../security/customer-authorisation-hook.md) — WebEAM / IAM gateway auth.
 - the unattended runs guide: the agent runner that runs the ServiceNow agent templates.
-- the knowledge-layer guide — curated entries + connectors (the CSDM map).
+- [the knowledge-layer guide](../tools/knowledge-layer.md) — curated entries + connectors (the CSDM map).
 - the licensing reference — editions + named features.
 - [the tools and agent templates overview](../tools/tools-and-playbooks.md): the full tool and agent catalogue.

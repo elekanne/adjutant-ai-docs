@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Installation guide — Adjutant AI
 
-**App version:** 2.7.2
+**App version:** 2.7.5
 **Last updated:** 2026-09-22
 
 This guide walks a Splunk administrator through deploying **Adjutant
@@ -65,7 +65,7 @@ app to a working, licensed, multi-Org state.
 ### Artefact and access
 
 - The downloaded `.spl` (or `.tar.gz`) artefact for the version you're
-  installing. The version below is **2.7.2**; substitute as needed.
+  installing. The version below is **2.7.5**; substitute as needed.
 - A web-browsing client that can reach the Splunk SH on port `8000`
   (HTTPS by default).
 - At least one of: an Anthropic API key (for the bootstrap LLM),
@@ -189,7 +189,7 @@ $SPLUNK_HOME/bin/splunk restart
 
 > **SHC:** push the tarball through the deployer; members will
 > restart automatically when the bundle is applied. Verify each member
-> reports the same `version = 2.7.2` in `default/app.conf` after the
+> reports the same `version = 2.7.5` in `default/app.conf` after the
 > rolling restart.
 
 ## 1b. What the install actually creates
@@ -625,7 +625,7 @@ Refer to the role-specific manuals:
   contract.
 - **[the auditing guide](./security/auditing.md)** — operator guide for the per-Org
   real audit logging configured in step 9b.
-- **the knowledge-layer guide** — the admin Knowledge
+- **[the knowledge-layer guide](./tools/knowledge-layer.md)** — the admin Knowledge
   tab and connectors (1.0.0+). SSE security content now flows through
   the `security-content` tools (1.2.0), not a connector.
 - **the troubleshooting guide** — symptom-driven

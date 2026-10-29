@@ -4,14 +4,15 @@ sidebar_position: 4
 
 # LLM Models & Cost Catalogue
 
-**App version:** 2.7.2
-**Last updated:** 2026-09-22
+**App version:** 2.7.5
+**Last updated:** 2026-10-28
 **Status:** definitive. This is the reference for *which LLMs Adjutant AI can use*,
 what they cost, how one gets chosen, and how to add one the app has never heard of.
 
-> **Read §12 before you rely on a listed price.** The shipped pack was priced
-> on 2026-06-27 and has known gaps — including an Anthropic line-up that predates
-> the Claude 5 family.
+> **Read §3.0 and §12 before you rely on a listed price.** Prices are list prices from the
+> LiteLLM community list: the shipped pack carries a snapshot of 2026-10-28, and
+> **Refresh prices** in the Models tab fetches the current list. They can differ from what
+> your provider invoices.
 
 ---
 
@@ -19,7 +20,7 @@ what they cost, how one gets chosen, and how to add one the app has never heard 
 
 1. [What you can actually run](#1-what-you-can-actually-run)
 2. [The nine providers](#2-the-nine-providers)
-3. [The shipped model catalogue](#3-the-shipped-model-catalogue)
+3. [The shipped model catalogue](#3-the-shipped-model-catalogue) (§3.0: where the prices come from)
 4. [How a model gets chosen](#4-how-a-model-gets-chosen)
 5. [Adding a model the app does not ship](#5-adding-a-model-the-app-does-not-ship)
 6. [Authoritative cost](#6-authoritative-cost)
@@ -132,9 +133,40 @@ desktop at all, and the key would have to travel to the browser to even try.
 
 ## 3. The shipped model catalogue
 
-31 rows, `pricing_pack_version = seed-1`, `catalog_version = 1`, all priced
-`2026-06-27`, all `price_source = shipped_pack`, all `model_status = active`,
-all `scope = global`.
+31 rows, all `scope = global`. Rows the LiteLLM snapshot of 2026-10-28 prices carry
+`price_source = litellm_snapshot` and that date; the Groq rows and `gemini-2.0-flash`, which
+the list no longer prices, keep their `shipped_pack` price of 2026-06-27.
+`mixtral-8x7b-32768` is retired (Groq no longer lists it) and hidden from the pickers.
+
+### 3.0 Where the prices come from
+
+List prices come from the **LiteLLM community list** (BerriAI/litellm
+`model_prices_and_context_window.json`, MIT licence; the notice is in the app's
+`THIRD_PARTY_NOTICES.md`). These are community-maintained list prices and can differ from what
+your provider invoices.
+
+- **Precedence.** A price an administrator sets (**Set price**) always wins and is never
+  changed by a fetch. Then the price fetched from the list, then the shipped pack, then
+  unknown.
+- **Refresh prices** (Models tab, administrators, every licence tier) fetches the list and
+  reports how many prices were updated, new and unchanged. Every live discovery sweep (§9)
+  refreshes prices too. A failed fetch (no internet access, a proxy, an invalid or changed
+  list) changes no price and says why.
+- **Mapping.** Chat models only; input, output, cache-read and cache-write prices, converted to
+  USD per 1,000,000 tokens. Each provider is matched under its own name in the list (OpenAI and
+  Anthropic by model id, Azure as `azure/<id>`, Gemini as `gemini/<id>`, Bedrock by model id,
+  Groq as `groq/<id>`). A missing price is never read as 0. OpenRouter keeps the prices its own
+  discovery returns; Ollama models are free.
+- **Dated ids.** A model id with a release date (`claude-haiku-4-5-20251001`,
+  `gpt-4o-mini-2024-07-18`) that has no price of its own uses the price of its alias
+  (`claude-haiku-4-5`), shown as inherited: "$1/$5 per MTok, from claude-haiku-4-5".
+- **Tiered prices are not modelled.** Where a provider charges more above a context size
+  (for example `gpt-5.4` above 272K tokens, Gemini 2.5 Pro above 200K), the lower tier is used.
+- **Offline and air-gapped installs** keep the shipped pack. To fetch from an internal mirror,
+  set `source_url` in `[model_prices]` of `itmip_ai_workbench.conf` (https; plain http only with
+  `allow_http = true`), with `proxy_url`, `proxy_credential_ref` and `tls_ca_pem_ref` when the
+  fetch goes through a proxy or a private CA. The fetch times out after 20 seconds and refuses a
+  list over 20 MB.
 
 **All prices are USD per 1,000,000 tokens.** A non-USD row is rejected at write
 time — the seed loader skips it, and the override endpoint refuses it.
@@ -160,25 +192,23 @@ Anthropic default, and the hard-coded last rung of the resolution ladder.
 
 | Model | In | Out | Cache read | Speed | Classes |
 |---|--:|--:|--:|---|---|
-| `gpt-4o-mini` | 0.15 | 0.6 | — | fast | cheap |
-| `gpt-4o` | 2.5 | 10 | — | balanced | balanced, vision |
-| `gpt-4.1` | 2 | 8 | — | balanced | balanced, large_context |
-| `gpt-4.1-mini` | 0.4 | 1.6 | — | fast | cheap |
-| `gpt-5.4` | 1.25 | 10 | 0.125 | balanced | premium, reasoning |
-| `gpt-5.4-mini` | 0.25 | 2 | 0.025 | fast | cheap, reasoning |
+| `gpt-4o-mini` | 0.15 | 0.6 | 0.075 | fast | cheap |
+| `gpt-4o` | 2.5 | 10 | 1.25 | balanced | balanced, vision |
+| `gpt-4.1` | 2 | 8 | 0.5 | balanced | balanced, large_context |
+| `gpt-4.1-mini` | 0.4 | 1.6 | 0.1 | fast | cheap |
+| `gpt-5.4` | 2.5 | 15 | 0.25 | balanced | premium, reasoning |
+| `gpt-5.4-mini` | 0.75 | 4.5 | 0.075 | fast | cheap, reasoning |
 
-The two GPT-5.4 rows carry a note saying their pricing is approximate — verify
-against OpenAI's current rate card before invoicing anyone. Both also trigger the
-reasoning-parameter rule in §7.
+Both GPT-5.4 rows trigger the reasoning-parameter rule in §7.
 
 ### 3.3 Azure OpenAI
 
 | Model | In | Out | Cache read | Speed | Classes |
 |---|--:|--:|--:|---|---|
-| `gpt-4o-mini` | 0.15 | 0.6 | — | fast | cheap |
-| `gpt-4o` | 2.5 | 10 | — | balanced | balanced, vision |
-| `gpt-5.4` | 1.25 | 10 | 0.125 | balanced | premium, reasoning |
-| `gpt-5.4-mini` | 0.25 | 2 | 0.025 | fast | cheap, reasoning |
+| `gpt-4o-mini` | 0.15 | 0.6 | 0.075 | fast | cheap |
+| `gpt-4o` | 2.5 | 10 | 1.25 | balanced | balanced, vision |
+| `gpt-5.4` | 2.5 | 15 | 0.25 | balanced | premium, reasoning |
+| `gpt-5.4-mini` | 0.75 | 4.5 | 0.075 | fast | cheap, reasoning |
 
 > **The `model` field must equal YOUR deployment name**, not the SKU. Azure puts
 > the deployment in the URL and leaves the model field empty on the wire, which
@@ -196,7 +226,9 @@ returns a 404 that looks like an auth fault.
 | Model | In | Out | Speed | Classes |
 |---|--:|--:|---|---|
 | `gemini-2.0-flash` | 0.075 | 0.3 | fast | cheap, large_context |
-| `gemini-2.5-pro` | 1.25 | 5 | balanced | premium, reasoning |
+| `gemini-2.5-pro` | 1.25 | 10 | balanced | premium, reasoning |
+
+`gemini-2.0-flash` is no longer on Google's pricing page; its row keeps the 2026-06-27 price.
 
 Carries a **free-tier caveat** shown under the provider picker: free-tier keys can
 return zero quota, which presents as a broken connection rather than a billing
@@ -208,9 +240,10 @@ limit.
 |---|--:|--:|---|---|
 | `llama-3.3-70b-versatile` | 0.59 | 0.79 | fast | balanced |
 | `llama-3.1-8b-instant` | 0.05 | 0.08 | fast | cheap |
-| `mixtral-8x7b-32768` | 0.24 | 0.24 | fast | cheap |
+| `mixtral-8x7b-32768` | retired | | | |
 
-Also carries a free-tier caveat: **Groq's free tier is 12K tokens/minute, smaller
+Groq publishes no public price for these two models; their rows keep the 2026-06-27 price
+with that date. Also carries a free-tier caveat: **Groq's free tier is 12K tokens/minute, smaller
 than a single typical Adjutant request.** A free Groq key will look broken under
 normal use. This is a rate limit, not a fault.
 
@@ -329,9 +362,23 @@ If the catalogue REST call fails or has not loaded, the frontend falls back to
 
 ### 4.5 What restricts which models a user may pick
 
-**Nothing, by policy.** There is no model allow-list or deny-list anywhere in the
-app, and the config editor accepts a free-text model id.
-What exists is *status* filtering and *advice*:
+**The Console's model list, set by an administrator (2.7.5).** Each model on the Models tab has an
+**Available in Console** switch. It decides which models users can pick in the Console model
+picker, and the server enforces it: the LLM proxy refuses a Console request for a model that is
+not available, with *"An administrator has not made &lt;model&gt; available in the Console."*
+
+| Rule | Effect |
+|---|---|
+| A configuration's own model | Always available, and its switch is locked on: a user never faces an empty picker for their configuration. |
+| An administrator's choice | Decides for every other model, including switching a provider's recommended model off. Every change is audited (`console_model_availability`). |
+| No choice made | On for the provider's recommended model, off for every other model. This is the starting state after an upgrade, and the state of every model a discovery run finds later. |
+| Unattended runs | Not affected: the agent runner uses its configuration's model. |
+| `browser_direct` configurations | They never reach the proxy, so the check runs **in the browser only and is not server-enforced**: the picker hides the model and the Ask is refused before it is sent. |
+
+The setting is global (one list for every Organisation). A model switched off can still be called
+for up to 15 seconds by a proxy worker that read the list just before the change.
+
+Other mechanisms, which are status and advice rather than policy:
 
 | Mechanism | Effect |
 |---|---|
@@ -341,10 +388,8 @@ What exists is *status* filtering and *advice*:
 | Health check | `selected_model_available` fails on retired, warns on deprecated or absent. **Advisory — it never blocks a call.** |
 | Config-collection ACL | `itmip_llm_configs` is write `[admin, sc_admin]`. A non-admin cannot create a configuration and therefore cannot pin a model. |
 
-That last row is the only real restriction, and it is a write ACL rather than a
-model policy. Licence gates apply to *catalogue features*
-(`live_model_discovery`, `model_catalog_overrides`) — **never to which model you
-may run**.
+Licence gates apply to *catalogue features* (`live_model_discovery`, `model_catalog_overrides`) —
+**never to which model you may run**.
 
 ---
 
@@ -418,19 +463,30 @@ and the run is never blocked.
 cost **server-side**, so the stored figure does not trust the browser.
 
 - `itmip_llm_usage_log.py` and `itmip_llm_audit.py` (the `llm_response` event)
-  recompute `cost_usd` from the catalogue using the request's token counts, and
+  recompute `cost_usd` from the catalogue using the request's token counts
+  (input, output, cache read and cache write), and
   **freeze the unit rates and their provenance onto the event**:
-  `unit_input_price`, `unit_output_price`, `unit_cache_read_price`, `currency`,
-  `price_source`, `price_status`, `price_as_of`, `catalog_version`.
+  `unit_input_price`, `unit_output_price`, `unit_cache_read_price`,
+  `unit_cache_write_price`, `currency`, `price_source`, `price_status`,
+  `price_as_of`, `catalog_version`. A Console call is priced by the model it
+  ran: the configured one, else the one the provider reported.
 - `itmip_llm_agent_runner.py` stamps the same authoritative cost onto unattended
   runs.
-- The browser's figure is a **preview**, used only when the catalogue cannot
-  price the model.
+- A dated model id that has no priced row of its own is priced from its alias:
+  `claude-haiku-4-5-20251001` from `claude-haiku-4-5`, and
+  `gpt-4o-mini-2024-07-18` from `gpt-4o-mini`. A row marked known whose input or
+  output price is blank counts as unknown, not as free; a stated price of 0 is free.
+- The browser's figure is a **preview**, priced by the model that ran, and used
+  only when the catalogue cannot price the model.
+- Each usage event says where its cost came from in `cost_source`: `catalog`,
+  `client_preview` or `unknown`.
 
 Because rates are frozen per event, a price change re-prices only *future* turns —
-**yesterday's recorded cost stays reproducible**. A model the catalogue cannot
-price records token counts with `price_status = unknown` and asserts no cost. It
-never blocks the run.
+**yesterday's recorded cost stays reproducible**. A model that neither the
+catalogue nor the preview can price records token counts with
+`price_status = unknown` and no `cost_usd` at all, never 0. It never blocks the
+run. Tokens & Costs, History and AI Activity sum the known costs and show how many
+calls, turns or runs had no price.
 
 **Precedence when resolving a rate** (highest first):
 
@@ -637,14 +693,16 @@ What is on it:
 
 | Element | What it does |
 |---|---|
-| The catalogue table | Every row with price status, provenance, `price_as_of`, and a **⌛ staleness marker past 90 days**. |
+| Provider tabs | One tab per provider that has models, plus **Discovery history**. (Before 2.7.5 a provider dropdown.) |
+| The catalogue table | The provider's rows with price status, provenance, `price_as_of`, and a **⌛ staleness marker past 90 days**. |
+| **Available in Console** column | The switch described in [4.5](#45-what-restricts-which-models-a-user-may-pick). Locked on, with the configuration named in the tooltip, for a configuration's own model. |
 | **Came from** column | Plain words — *Shipped* / *Discovered &lt;date&gt;* / *Admin* — instead of the raw `discovery_source` enum. |
 | **Refresh from providers** | Runs a sweep now. 403s below Professional. |
 | **Set price** *(per row)* | Opens the *Set price* dialog with that row's model filled in. Enterprise admins only. |
-| Discovery run history | Past sweeps, with an upgrade explainer as the empty state on non-discovery tiers. |
+| **Discovery history** tab | Every sweep with its date and time (your local time, UTC in the tooltip), provider, trigger, status, models found, priced and the catalogue version. Every status other than ok carries a plain explanation from the run's own warnings, for example *"No API key is configured for this provider, so its models were not listed."* For Azure OpenAI, a partial run means *"No Azure account is configured for discovery, so its deployments were not listed."* Non-discovery tiers see an upgrade explainer instead. |
 | *Price overrides* and *Registered models* | Two lists with **+ Set price** and **+ Register model**, and Edit and Delete per row. Each opens a dialog with labelled fields, the prices in US dollars per 1 million tokens, a worked cost example, and the server's own reason when a value is refused. Enterprise admins only; hidden otherwise, and the endpoint 403s regardless. |
 
-Arriving from a specific LLM configuration filters to that provider and highlights
+Arriving from a specific LLM configuration opens that provider's tab and highlights
 that configuration's default model (`initialProvider` / `focusModel`).
 
 ---
@@ -658,7 +716,8 @@ that configuration's default model (`initialProvider` / `focusModel`).
 | `itmip_llm_model_catalog` | The catalogue. `_key` = `<provider_kind>::<account_ref\|global>::<model_id>` (non-key-safe characters sanitised in the `_key`; `model_id` keeps the real id). |
 | `itmip_llm_catalog_meta` | Singleton `_key=seed` — the `seed_version` marker. |
 | `itmip_llm_price_overrides` | Admin overrides, deliberately separate. |
-| `itmip_llm_model_catalog_runs` | Sanitised discovery-run history. |
+| `itmip_llm_model_catalog_runs` | Sanitised discovery-run history; from 2.7.5 every warning of a run (`warnings`, a JSON list). |
+| `itmip_llm_console_models` | The administrators' **Available in Console** choices, `_key` = `<provider_kind>::<model_id>`. Read `[ * ]` (the Console picker reads it), write `[ admin, sc_admin ]`; included in the KV backup. |
 
 **ACL** (`metadata/default.meta`): catalogue **read `[ * ]`** — the bootstrap, the Console
 and the dropdown read it as any authenticated user via the system token —
@@ -717,10 +776,9 @@ entire codebase**, not just the seed: no `claude-opus-5`, `claude-sonnet-5` or
 `claude-fable-5-1` string exists anywhere in the app.
 
 Nothing breaks. You can type the id into the model field and the adapter
-will send it; discovery will find it on the next sweep and add it with
-`price_status = unknown`. But **it is not offered in the dropdown, and it is not
-priced**, so cost reporting will record tokens without a cost. The fix is a seed
-refresh plus a `SEED_VERSION` bump.
+will send it; discovery will find it on the next sweep and add it, and the sweep's price
+refresh prices it when the LiteLLM community list lists it (§3.0). Until then it records
+tokens with the cost shown as unknown, never as 0.
 
 ### 12.2 The offline fallback still carries the 3× Opus price
 

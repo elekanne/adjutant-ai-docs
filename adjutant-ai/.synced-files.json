@@ -1,6 +1,6 @@
 {
   "product": "adjutant-ai",
-  "syncedAt": "2026-10-28T08:04:17.629Z",
+  "syncedAt": "2026-10-29T15:57:26.201Z",
   "files": [
     "admin/admin-manual.md",
     "admin/img/prompt-assembly.svg",
@@ -13,9 +13,11 @@
     "admin/security/customer-authorisation-hook.md",
     "admin/stateless.md",
     "admin/tools/custom-tools-authoring.md",
+    "admin/tools/knowledge-layer.md",
     "admin/tools/mcp-and-custom-tools.md",
     "admin/tools/mcp-oauth.md",
     "admin/tools/mcp-server.md",
+    "admin/tools/skills.md",
     "admin/tools/tool-catalogue.md",
     "admin/tools/tools-and-playbooks.md",
     "user/user-manual.md"

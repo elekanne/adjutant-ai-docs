@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Admin manual — Adjutant AI (formerly AI Workbench)
 
-**App version:** 2.7.2
+**App version:** 2.7.5
 **Last updated:** 2026-10-12
 **Audience:** Splunk users holding `admin`, `splunk_admin` **or** `sc_admin`
 on the search head where this app is installed. Those three are the whole
@@ -110,7 +110,7 @@ Help are shared with end users.
 |-----|---------|
 | Agents | CRUD on agents; promote `draft` → `operational`; clone across Org/BU; visibility scoping; **edit each agent's `includes_skills` list (0.9.6+)**; **see users' own private agents from 0.9.7+** (filter not yet in UI; they appear mixed with the agent templates). 90 agent templates ship as seeds: 65 ready and 25 in preview. |
 | Skills (0.9.6+) | CRUD on the **Skills layer**: reusable "do-it-correctly" prose blocks that agents reference. Sits between agents and tools. 52 ship as seeds. See [the tools and agent templates overview, §3.5](./tools/tools-and-playbooks.md). |
-| Knowledge | Manage knowledge entries + connectors. Live-platform connectors read the running instance's `searchbnf.conf` (command syntax) and installed visualizations to ground SPL/viz generation (1.4.0). Four sub-tabs: Connectors, Static rules, Curated entries, Learned Knowledge. (Integration State, Integration Runs and Mappings moved to Unattended in 2.7.0.) See the knowledge-layer guide. |
+| Knowledge | Manage knowledge entries + connectors. Live-platform connectors read the running instance's `searchbnf.conf` (command syntax) and installed visualizations to ground SPL/viz generation (1.4.0). Four sub-tabs: Connectors, Static rules, Curated entries, Learned Knowledge. (Integration State, Integration Runs and Mappings moved to Unattended in 2.7.0.) See [the knowledge-layer guide](./tools/knowledge-layer.md). |
 | Unattended *(2.x)* | The home for everything that runs unattended (page heading **Unattended runs**). Five sections: **Integrations**, **Agent jobs**, **Mappings**, **Input sources** (the sources an agent or integration may read from) and **All runs**. **Integrations** lists every integration with its sources, destinations, schedule and last run; opening one shows its flow (source → mapping → destination, drawn from the integration agent's contract and the mapping its run uses), its runs, its watermarks and its schedule, with **Run now** and **Edit schedule**. Two kinds of schedule: a **Scheduled Job** runs an agent and delivers a result (needs the `scheduled_job` capability, Professional+); a **Scheduled Integration** reads a source and writes a target (needs the **`data_integration`** capability, Enterprise and MSP, from 2.7.0). The integration branch is chosen by the type **or** by the bound agent's `integration` tag, so it cannot be booked as a cheaper agent job by relabelling. See the unattended runs and memory guide and the AI Driven Integration guide. |
 | Tokens & Costs | Cost / token analytics, multi-group comparison, over-time charts. Greyed unless licence ≥ Professional. |
 | Orgs & BUs | Org and BU CRUD. Cap-enforced by licence. |
@@ -519,7 +519,7 @@ directly in the Agents tab's Edit modal:
 1. Open the user-authored agent in the Edit modal.
 2. Change `org_short` / `bu_short` to the desired scope (the
    `sharing` field will follow at read time via the dual-read
-   mapper; see [the tools and agent templates overview, §2](./tools/tools-and-playbooks.md#2-tenancy-model--org--bu-scoping)).
+   mapper; see [the tools and agent templates overview, §2](./tools/tools-and-playbooks.md#2-tenancy-model-org-and-bu-scoping)).
 3. Save. The row's `sharing` field is now derived to match the new
    Org/BU scope.
 

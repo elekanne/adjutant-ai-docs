@@ -1,10 +1,10 @@
 ---
-sidebar_position: 9
+sidebar_position: 11
 ---
 
 # Custom HTTP tools — authoring guide
 
-**App version:** 2.7.2 · **Last updated:** 2026-09-16 · **Audience:** Splunk admins
+**App version:** 2.7.5 · **Last updated:** 2026-09-16 · **Audience:** Splunk admins
 (`admin` / `sc_admin`) who will author custom tools on the search head where Adjutant AI
 is installed.
 
